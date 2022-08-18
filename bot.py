@@ -1,5 +1,4 @@
 import logging
-from multiprocessing import context
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -9,7 +8,7 @@ import scrapy
 from scrapyscript import Job, Processor
 
 
-from datetime import date #, datetime, timedelta
+from datetime import date, timedelta
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -17,24 +16,13 @@ logging.basicConfig(
 )
 
 
-
 ###### crawler instantiation und stuff
 class MensaSpider(scrapy.Spider):
-    name = 'quotes'
-    # start_urls = [
-    #     'https://www.studentenwerk-leipzig.de/mensen-cafeterien/speiseplan?location=140',
-    # ]
+    name = 'mensaplan'
+
+    # the URL has to be passed when creating a Job
 
     def parse(self, response):
-
-        #date = response.css('#edit-date * ::text').get()
-
-        # for meal in response.css('div.meals__summary'):
-        #     yield {
-        #         'date': date,
-        #         'name': meal.xpath('h4/text()').get(),
-        #         'preis': meal.xpath('p/text()[2]').get().strip()
-        #     }
 
         for meal in response.css('section.accordion__item'):         
             yield {
@@ -45,7 +33,7 @@ class MensaSpider(scrapy.Spider):
 
 
 
-processor = Processor(settings=None)
+
 
 
 
@@ -55,67 +43,50 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     weekdays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
     
-    current_date = date.today()
+    currentDate = date.today()#+timedelta(days=14)
+                                # for testing purposes
 
     # Heute ist Mo-Fr (fooden)
-    if current_date.isoweekday() <=5:
-        message += weekdays[current_date.isoweekday()-1] + date.today().strftime(", %d.%m.%Y") + " (Heute)\n\n"
+    if currentDate.isoweekday() <=5:
+        dataDate = currentDate
+        message += "_" + weekdays[dataDate.isoweekday()-1] + dataDate.strftime(", %d.%m.%Y") + " (Heute)_\n\n"
 
-        todayjob = Job(MensaSpider, start_urls=['https://www.studentenwerk-leipzig.de/mensen-cafeterien/speiseplan?location=140' + '&date=' + str(date.today())])
+    # Samstag → Plan für übermorgen laden
+    elif currentDate.isoweekday() == 6:
+        dataDate = currentDate + timedelta(days=2)
+        message += "_" + weekdays[dataDate.isoweekday()-1] + dataDate.strftime(", %d.%m.%Y") + " (Übermorgen)_\n\n"
         
-        # spider für heute
-        data = processor.run(todayjob)
+    # Sonntag → Plan für morgen laden
+    elif currentDate.isoweekkday() == 7:
+        dataDate = currentDate + timedelta(days=1)
+        message += "_" + weekdays[dataDate.isoweekday()-1] + dataDate.strftime(", %d.%m.%Y") + " (Morgen)_\n\n"
 
+
+    job = Job(MensaSpider, start_urls=['https://www.studentenwerk-leipzig.de/mensen-cafeterien/speiseplan?location=140' + '&date=' + str(dataDate)])
+    processor = Processor(settings=None)  
+    data = processor.run(job)
+
+    
+    if len(data) == 0:
+        message += "*Für diesen Tag existiert noch kein Plan.*"
+
+    else:
         # getting spider results and generating message
         for gericht in data:
             message += "*" + gericht['name'] + "* \n" 
 
             for additional in gericht['additional']:
-                message += "+" + additional + "\n"
+                message += " + " + additional + "\n"
 
             message += gericht['preis'] + "\n\n"
-            
+        
 
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN)
-
-
-
-    
-
-    
-
-    #  # n ächster Tag ist ein Wochentag.
-    # if current_weekday < 5 or current_weekday == 7:
-    #     next_date = date.today() + timedelta(days=1)
-    # # es ist Freitag → Montag in 3 Tagen
-    # elif date.today().isoweekday() == 5:
-    #     next_date = date.today() + timedelta(days=3)
-    # # Samstag → Montag in 2 Tagen
-    # elif date.today().isoweekday() == 6:
-    #     next _date = date.today() + timedelta(days=2)
-
-    # datum als param????
-
-    # nextjob = Job(MensaSpider, url='')
-    # data = processor.run(job)
-    
-
-    
-
-
-
-
-
-
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN)
 
 
 if __name__ == '__main__':
     application = ApplicationBuilder().token('TOKEN').build()
     
     start_handler = CommandHandler('start', start)
-
-
-
     application.add_handler(start_handler)
-    
     application.run_polling()
