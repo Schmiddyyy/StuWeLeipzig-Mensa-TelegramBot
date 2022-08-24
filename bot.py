@@ -2,9 +2,6 @@ from pid import PidFile
 from pid.base import PidFileAlreadyLockedError
 
 
-import os
-import atexit
-
 import logging
 
 from telegram import Update
@@ -36,28 +33,22 @@ logging.basicConfig(level=logging.INFO,
 
 loadedJobs = {}
 
-# When True, automatic messages will be sent every 10 seconds instead of daily.
-# WARNING: this applies to everyone, so everyone subscribed to messages will get a msg every 10 seconds
-DBG = False
+
 
 
 
 def registerJob(id, hour, min):
-    # current_registration = cur.execute("select * from chatids where id= (?) ", [id]).fetchall()
 
     cur.execute("insert into chatids values(?,?,?)", [id, hour, min])
     con.commit()
 
 
     # starting the job
-    if DBG:
-        jobReference = application.job_queue.run_repeating(callback=callback_heute, interval=timedelta(seconds=5), chat_id=id)
-    else:
-        localDate = datetime.now().replace(hour=int(hour), minute=int(min))
-        utcDate = localDate.astimezone(tz=timezone.utc)
-        utcTime = time(hour=utcDate.hour, minute=utcDate.minute)
+    localDate = datetime.now().replace(hour=int(hour), minute=int(min))
+    utcDate = localDate.astimezone(tz=timezone.utc)
+    utcTime = time(hour=utcDate.hour, minute=utcDate.minute)
 
-        jobReference = application.job_queue.run_daily(callback=callback_heute, time=utcTime, days=(1,2,3,4,5), chat_id=id)
+    jobReference = application.job_queue.run_daily(callback=callback_heute, time=utcTime, days=(1,2,3,4,5), chat_id=id)
 
     # saving the ref to loaded job (so that it can be unloaded)
     loadedJobs[id] = jobReference
@@ -89,14 +80,12 @@ def loadJobs():
 
     for line in data:
         try:
-            if DBG:
-                jobReference = application.job_queue.run_repeating(callback=callback_heute, interval=timedelta(seconds=5), chat_id=int(line[0]))
-            else:
-                localDate = datetime.now().replace(hour=int(line[1]), minute=int(line[2]))
-                utcDate = localDate.astimezone(tz=timezone.utc)
-                utcTime = time(hour=utcDate.hour, minute=utcDate.minute)
-                
-                jobReference = application.job_queue.run_daily(callback=callback_heute, time=utcTime, chat_id=int(line[0]))
+
+            localDate = datetime.now().replace(hour=int(line[1]), minute=int(line[2]))
+            utcDate = localDate.astimezone(tz=timezone.utc)
+            utcTime = time(hour=utcDate.hour, minute=utcDate.minute)
+            
+            jobReference = application.job_queue.run_daily(callback=callback_heute, time=utcTime, chat_id=int(line[0]))
             
             loadedJobs[int(line[0])] = jobReference
 
@@ -152,9 +141,11 @@ def createMessageStringFromSpider(date, morgen=False):
                 continue
 
             message +=  "*" + result + ":*\n"
+
             for subitem in data[0][result]:
-                message += "__" + subitem[0] + "__\n"
-                message += subitem[1] + "\n"
+                message += " •__ " + subitem[0] + "__\n"
+                message += "    " +subitem[1] + "\n"
+
             message += "\n"
 
         message += "  < /heute >      < /morgen >"
@@ -164,6 +155,7 @@ def createMessageStringFromSpider(date, morgen=False):
 
     # required by Markdown V2
     message = message.replace(".", "\.")
+    message = message.replace("+", "\+")
     message = message.replace("<", "\<")
     message = message.replace(">", "\>")
     message = message.replace("(", "\(")
