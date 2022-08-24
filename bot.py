@@ -1,6 +1,10 @@
+from pid import PidFile
+
+
+import os
+import atexit
+
 import logging
-import sys
-from trace import Trace
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -13,6 +17,7 @@ from scrapyscript import Job, Processor
 from datetime import datetime, time, date, timedelta, timezone
 
 import re
+
 
 
 
@@ -358,41 +363,45 @@ async def callback_heute(context):
 
 
 if __name__ == '__main__':
-    try:
-        with open("token.txt", "r") as fobj:
-            token = fobj.readline().strip()
-    except FileNotFoundError:
-        logging.critical("'token.txt' missing. Create it and insert the token (without quotation marks)")
-        exit()
+
+    # prevents multiple instances of this script to run at the same time → easy way to restart in case of error
+    with PidFile():
+
+        try:
+            with open("token.txt", "r") as fobj:
+                token = fobj.readline().strip()
+        except FileNotFoundError:
+            logging.critical("'token.txt' missing. Create it and insert the token (without quotation marks)")
+            exit()
 
 
-    application = ApplicationBuilder().token(token).read_timeout(30).write_timeout(30).connect_timeout(30).pool_timeout(30).build()
-    
-    # restoring all daily auto messages using chatids and times saved to jobs.db
-    loadJobs()
+        application = ApplicationBuilder().token(token).read_timeout(30).write_timeout(30).connect_timeout(30).pool_timeout(30).build()
+        
+        # restoring all daily auto messages using chatids and times saved to jobs.db
+        loadJobs()
 
 
-    
-    start_handler = CommandHandler('start', start)
-    application.add_handler(start_handler)
+        
+        start_handler = CommandHandler('start', start)
+        application.add_handler(start_handler)
 
-    heute_handler = CommandHandler('heute', heute)
-    application.add_handler(heute_handler)
+        heute_handler = CommandHandler('heute', heute)
+        application.add_handler(heute_handler)
 
-    morgen_handler = CommandHandler('morgen', morgen)
-    application.add_handler(morgen_handler)
+        morgen_handler = CommandHandler('morgen', morgen)
+        application.add_handler(morgen_handler)
 
-    subscribe_handler = CommandHandler('subscribe', subscribe)
-    application.add_handler(subscribe_handler)
+        subscribe_handler = CommandHandler('subscribe', subscribe)
+        application.add_handler(subscribe_handler)
 
-    unsubscribe_handler = CommandHandler('unsubscribe', unsubscribe)
-    application.add_handler(unsubscribe_handler)
+        unsubscribe_handler = CommandHandler('unsubscribe', unsubscribe)
+        application.add_handler(unsubscribe_handler)
 
-    changetime_handler = CommandHandler('changetime',  changetime)
-    application.add_handler(changetime_handler)
-    
-    
-    application.run_polling()
+        changetime_handler = CommandHandler('changetime',  changetime)
+        application.add_handler(changetime_handler)
+        
+        
+        application.run_polling()
 
 
     
