@@ -219,6 +219,10 @@ async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
 
 
+async def uebermorgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = createMessageStringFromSpider(date.today() + timedelta(days=2), morgen=True)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
+
 
 async def dbg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
@@ -357,7 +361,8 @@ if __name__ == '__main__':
             # restoring all daily auto messages using chatids and times saved to jobs.db
             loadJobs()
 
-
+            dbg_handler = CommandHandler('dbg', dbg)
+            application.add_handler(dbg_handler)
             
             start_handler = CommandHandler('start', start)
             application.add_handler(start_handler)
@@ -365,11 +370,14 @@ if __name__ == '__main__':
             heute_handler = CommandHandler('heute', heute)
             application.add_handler(heute_handler)
 
-            dbg_handler = CommandHandler('dbg', dbg)
-            application.add_handler(dbg_handler)
-
             morgen_handler = CommandHandler('morgen', morgen)
             application.add_handler(morgen_handler)
+
+            uebermorgen_handler = CommandHandler('uebermorgen', uebermorgen)
+            application.add_handler(uebermorgen_handler)
+
+            ubermorgen_handler = CommandHandler('ubermorgen', uebermorgen)
+            application.add_handler(ubermorgen_handler)
 
             subscribe_handler = CommandHandler('subscribe', subscribe)
             application.add_handler(subscribe_handler)
