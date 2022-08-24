@@ -360,7 +360,7 @@ async def callback_heute(context):
 if __name__ == '__main__':
     try:
         with open("token.txt", "r") as fobj:
-            token = fobj.readline()
+            token = fobj.readline().strip()
     except FileNotFoundError:
         logging.critical("'token.txt' missing. Create it and insert the token (without quotation marks)")
         exit()
@@ -368,7 +368,7 @@ if __name__ == '__main__':
 
     application = ApplicationBuilder().token(token).read_timeout(30).write_timeout(30).connect_timeout(30).pool_timeout(30).build()
     
-
+    # restoring all daily auto messages using chatids and times saved to jobs.db
     loadJobs()
 
 
