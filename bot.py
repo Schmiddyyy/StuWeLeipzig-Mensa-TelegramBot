@@ -146,9 +146,9 @@ def createMessageStringFromSpider(date, morgen=False):
                 message += " •__ " + subitem[0] + "__\n"
                 message += "    " +subitem[1] + "\n"
 
-            message += "\n"
-
-        message += "  < /heute >      < /morgen >"
+            message += ""
+        message += "\n < /heute >  < /morgen >"
+        message += "\n < /uebermorgen >"
 
 
     
