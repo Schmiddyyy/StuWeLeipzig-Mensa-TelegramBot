@@ -33,51 +33,6 @@ logging.basicConfig(level=logging.INFO,
 
 
 
-# # clearing the log
-# with open('log.log', 'w'):
-#     pass
-
-# # logger init
-# mylogger = logging.getLogger('myLogger')
-
-
-# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-
-# # logger to ./log.txt
-# fileHandler = logging.FileHandler(filename='log.log')
-# fileHandler.setLevel(logging.INFO)
-# fileHandler.setFormatter(formatter)
-# mylogger.addHandler(fileHandler)
-
-# # logger to stdout
-# stdOutHandler = logging.StreamHandler(stream=sys.stdout)
-# stdOutHandler.setLevel(logging.INFO)
-# stdOutHandler.setFormatter(formatter)
-# mylogger.addHandler(stdOutHandler)
-
-
-# # 'spoofing' class to redirect stdout to myLogger (which then forwards it to stdout AND log.log)
-# class LoggerWriter:
-#     def __init__(self, level):
-#         self.level = level
-
-#     def write(self, message):
-
-#         if message != '\n':
-#             self.level(message)
-
-#     def flush(self):
-#         # flush clears the line buffer (happens when writing \n), which does not matter here
-#         pass
-
-# # sys.stdout = LoggerWriter(mylogger.debug)
-# sys.stderr = LoggerWriter(mylogger.warning)
-
-
-
-
-
 
 loadedJobs = {}
 
@@ -88,21 +43,7 @@ DBG = False
 
 
 def registerJob(id, hour, min):
-    current_registration = cur.execute("select * from chatids where id= (?) ", [id]).fetchall()
-    
-    
-    # if len(current_registration) == 1:
-    #     if current_registration[0][1] == hour and current_registration[0][2] == min:
-    #         print("no change....")
-    #         print(hour)
-    #         print(min)
-    #         #exit()
-    #     else:
-    #         print("NEW TIME")
-
-    # print(current_registration)
-
-    #exit()
+    # current_registration = cur.execute("select * from chatids where id= (?) ", [id]).fetchall()
 
     cur.execute("insert into chatids values(?,?,?)", [id, hour, min])
     con.commit()
@@ -165,6 +106,7 @@ def loadJobs():
 
 
 def createMessageStringFromSpider(date, morgen=False):
+
     message = ""
 
     weekdays = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag"]
@@ -200,20 +142,32 @@ def createMessageStringFromSpider(date, morgen=False):
     data = processor.run(job)
 
     
-    if len(data) == 0:
-        message += "*Für diesen Tag existiert noch kein Plan.*"
+    if len(data) == 0 or data[0]['date'].split(",")[1].strip() != dataDate.strftime("%d.%m.%Y"):
+        message += "Für diesen Tag existiert noch kein Plan."
 
     else:
         # generating message from spider results
-        for gericht in data:
-            message += "*" + gericht['name'] + "* \n" 
+        for result in data[0]:
+            if result == "date":
+                continue
 
-            for additional in gericht['additional']:
-                message += " + " + additional + "\n"
+            message +=  "*" + result + ":*\n"
+            for subitem in data[0][result]:
+                message += "__" + subitem[0] + "__\n"
+                message += subitem[1] + "\n"
+            message += "\n"
 
-            message += gericht['preis'] + "\n\n"
-        
-    message += "  < /heute >      < /morgen >"
+        message += "  < /heute >      < /morgen >"
+
+
+    
+
+    # required by Markdown V2
+    message = message.replace(".", "\.")
+    message = message.replace("<", "\<")
+    message = message.replace(">", "\>")
+    message = message.replace("(", "\(")
+    message = message.replace(")", "\)")
 
     return message
 
@@ -222,16 +176,26 @@ def createMessageStringFromSpider(date, morgen=False):
 class MensaSpider(scrapy.Spider):
     name = 'mensaplan'
 
-    # the URL has to be passed when creating a Job
 
     def parse(self, response):
+        result = {}
 
-        for meal in response.css('section.accordion__item'):         
-            yield {
-                'name': meal.xpath('header/div/div/h4/text()').get(),
-                'preis': meal.xpath('header/div/div/p/text()[2]').get().strip(),
-                'additional': meal.xpath('details/ul/li/text()').getall()
-            }
+        result['date'] = response.css('select#edit-date>option[selected="selected"]::text').get()
+
+        for header in response.css('h3.title-prim'):
+            name = header.xpath('text()').get()
+
+            result[name] = []
+
+            # for subitem in header.xpath('following-sibling::div/*'):
+            for subitem in header.xpath('following-sibling::*'):
+                if subitem.attrib == {'class': 'title-prim'}:
+                    break
+                elif subitem.attrib == {'class': 'accordion u-block'}:
+                    for subsubitem in subitem.xpath('child::section'):
+                        result[name].append((subsubitem.xpath('header/div/div/h4/text()').get(), subsubitem.xpath('header/div/div/p/text()[2]').get().strip()))
+
+        yield result
 
 
 
@@ -252,18 +216,36 @@ Wenn /heute oder /morgen kein Wochentag ist, wird der Plan für Montag angezeigt
 
 
 async def heute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # alarm: update: Update, context: ContextTypes.DEFAULT_TYPE
-    
-    # aufruf: 'context' fehlt
-    
+
     message = createMessageStringFromSpider(date.today())
     
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = createMessageStringFromSpider(date.today() + timedelta(days=1), morgen=True)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN)
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
+
+
+
+async def dbg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    day = int(context.args[0])
+    month = int(context.args[1])
+    year = int(context.args[2])
+    
+    dataDate = date.today().replace(year=year, month=month, day=day)
+
+    message = createMessageStringFromSpider(dataDate)
+    
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
+
+
+async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = createMessageStringFromSpider(date.today() + timedelta(days=1), morgen=True)
+    
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
+
 
 
 async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -274,10 +256,10 @@ async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             hour, min = parseTime(context.args[0])
         except ValueError:
-            await context.bot.send_message(chat_id=chat_id, text="Eingegebene Zeit ist ungültig!", parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(chat_id=chat_id, text="Eingegebene Zeit ist ungültig.", parse_mode=ParseMode.MARKDOWN)
             return
     else:
-        await context.bot.send_message(chat_id=chat_id, text="Es wurde keine Zeit eingegeben.", parse_mode=ParseMode.MARKDOWN)
+        await context.bot.send_message(chat_id=chat_id, text="Bitte Zeit eingegeben\n( /changetime \[Zeit] )", parse_mode=ParseMode.MARKDOWN)
         return
         
     
@@ -359,13 +341,13 @@ async def callback_heute(context):
     job = context.job
     message = createMessageStringFromSpider(date.today())
 
-    await context.bot.send_message(job.chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+    await context.bot.send_message(job.chat_id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
 
 
 
 if __name__ == '__main__':
 
-    # if pidfile exists ≙ program is already running: catch the pidfilelocked exc, exit()
+    # if pidfile exists ≙ program is already running: catch the pidfilelocked exc, exit()vi
     try:
         # prevents multiple instances of this script to run at the same time → easy way to restart in case of error
         with PidFile():
@@ -391,6 +373,9 @@ if __name__ == '__main__':
             heute_handler = CommandHandler('heute', heute)
             application.add_handler(heute_handler)
 
+            dbg_handler = CommandHandler('dbg', dbg)
+            application.add_handler(dbg_handler)
+
             morgen_handler = CommandHandler('morgen', morgen)
             application.add_handler(morgen_handler)
 
@@ -408,12 +393,3 @@ if __name__ == '__main__':
 
     except PidFileAlreadyLockedError:
         exit()
-
-
-    
-    # while True:
-    #     try:
-    #         application.run_polling()
-    #     except RuntimeError as e:
-    #         logging.info(f'EventLoop was stopped: '{str(e)})
-    #         exit()
