@@ -263,16 +263,33 @@ async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     chat_id=update.effective_chat.id
 
+    
+
     if len(context.args) != 0:
         try:
             hour, min = parseTime(context.args[0])
+            unregisterJob(id=chat_id)
+            registerJob(id=chat_id, hour=hour, min=min)
+
         except ValueError:
             await context.bot.send_message(chat_id=chat_id, text="Eingegebene Zeit ist ungültig.", parse_mode=ParseMode.MARKDOWN)
             return
     else:
         await context.bot.send_message(chat_id=chat_id, text="Bitte Zeit eingegeben\n( /changetime \[Zeit] )", parse_mode=ParseMode.MARKDOWN)
         return
-        
+     # adding chatid to database (so that job can be recreated @ server restart)
+
+    try:
+        unregisterJob(chat_id)
+        registerJob(chat_id, hour, min)
+        message = "Plan wird ab jetzt automatisch an Wochentagen "+ hour+":"+min + " Uhr gesendet."
+
+    except KeyError:
+        message = "Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen"
+    
+    # confirmation message
+    await context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
 async def gettime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     chat_id=update.effective_chat.id
@@ -280,7 +297,6 @@ async def gettime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     time = cur.execute("select hour,min from chatids where id=(?)", [chat_id]).fetchone()
     message = str(time[0]) + ":" + str(time[1]) + " Uhr"
 
-    # confirmation message
     await context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
 
 
