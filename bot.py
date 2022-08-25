@@ -273,18 +273,12 @@ async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=chat_id, text="Bitte Zeit eingegeben\n( /changetime \[Zeit] )", parse_mode=ParseMode.MARKDOWN)
         return
         
+async def gettime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
+    chat_id=update.effective_chat.id
 
-
-    # adding chatid to database (so that job can be recreated @ server restart)
-    try:
-        unregisterJob(chat_id)
-        registerJob(chat_id, hour, min)
-        message = "Plan wird ab jetzt automatisch an Wochentagen "+ hour+":"+min + " Uhr gesendet."
-
-    except KeyError:
-        message = "Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen"
-
+    time = cur.execute("select hour,min from chatids where id=(?)", [chat_id]).fetchone()
+    message = str(time[0]) + ":" + str(time[1]) + " Uhr"
 
     # confirmation message
     await context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
@@ -402,6 +396,9 @@ if __name__ == '__main__':
 
             changetime_handler = CommandHandler('changetime',  changetime)
             application.add_handler(changetime_handler)
+
+            gettime_handler = CommandHandler('time',  gettime)
+            application.add_handler(gettime_handler)
             
             
             application.run_polling()
