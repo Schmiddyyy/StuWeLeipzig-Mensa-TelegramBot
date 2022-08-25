@@ -133,7 +133,7 @@ def createMessageStringFromSpider(date, morgen=False):
 
     # when a date is requested that is too far in the future, the site will load the current date
     # therefore, if the date reported by the site (inside data{}) is != dataDate, no plan for that date is available.
-    if len(data) == 1 or data[0]['date'].split(",")[1].strip() != dataDate.strftime("%d.%m.%Y"):
+    if len(data[0]) == 1 or data[0]['date'].split(",")[1].strip() != dataDate.strftime("%d.%m.%Y"):
         message += "Für diesen Tag existiert noch kein Plan."
 
     else:
