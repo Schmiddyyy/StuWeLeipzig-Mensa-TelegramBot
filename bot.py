@@ -130,8 +130,10 @@ def createMessageStringFromSpider(date, morgen=False):
     processor = Processor(settings=None)  
     data = processor.run(job)
 
-    
-    if len(data) == 0 or data[0]['date'].split(",")[1].strip() != dataDate.strftime("%d.%m.%Y"):
+
+    # when a date is requested that is too far in the future, the site will load the current date
+    # therefore, if the date reported by the site (inside data{}) is != dataDate, no plan for that date is available.
+    if len(data) == 1 or data[0]['date'].split(",")[1].strip() != dataDate.strftime("%d.%m.%Y"):
         message += "Für diesen Tag existiert noch kein Plan."
 
     else:
@@ -140,22 +142,27 @@ def createMessageStringFromSpider(date, morgen=False):
             if result == "date":
                 continue
 
+            # Art, zb. "Vegetarisches Gericht"
             message +=  "*" + result + ":*\n"
+            # Name des Gerichts (bzw. des 'Teilgerichts' bei Gericht mit freier Auswahl)
+            message += " •__ " + data[0][result][0] + "__\n"
+            # Bestandteile/Zutaten des Gerichts (Sichtbar wenn '+' auf Seite geklickt)
+            for additionalIngredient in data[0][result][1]:
+                message += "     + _" + additionalIngredient + "_\n"
+            #Preis des Gerichts
+            message += "   " + data[0][result][2] + "\n\n"
 
-            for subitem in data[0][result]:
-                message += " •__ " + subitem[0] + "__\n"
-                message += "    " +subitem[1] + "\n"
-
-            message += ""
-        message += "\n < /heute >  < /morgen >"
+        message += " < /heute >  < /morgen >"
         message += "\n < /uebermorgen >"
 
 
     
 
     # required by Markdown V2
+
     message = message.replace(".", "\.")
     message = message.replace("+", "\+")
+    message = message.replace("-", "\-")
     message = message.replace("<", "\<")
     message = message.replace(">", "\>")
     message = message.replace("(", "\(")
@@ -181,11 +188,19 @@ class MensaSpider(scrapy.Spider):
 
             # for subitem in header.xpath('following-sibling::div/*'):
             for subitem in header.xpath('following-sibling::*'):
+                # title-prim ≙ begin of next menu → stop processing
                 if subitem.attrib == {'class': 'title-prim'}:
                     break
                 elif subitem.attrib == {'class': 'accordion u-block'}:
                     for subsubitem in subitem.xpath('child::section'):
-                        result[name].append((subsubitem.xpath('header/div/div/h4/text()').get(), subsubitem.xpath('header/div/div/p/text()[2]').get().strip()))
+                        
+                        title = subsubitem.xpath('header/div/div/h4/text()').get()
+                        additionalIngredients = subsubitem.xpath('details/ul/li/text()').getall()
+                        price = subsubitem.xpath('header/div/div/p/text()[2]').get().strip()
+
+                        result[name] = (title, additionalIngredients, price)
+                        print(result)
+                        # result[name].append((subsubitem.xpath('header/div/div/h4/text()').get(), subsubitem.xpath('header/div/div/p/text()[2]').get().strip()))
 
         yield result
 
