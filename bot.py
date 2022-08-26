@@ -144,13 +144,15 @@ def createMessageStringFromSpider(date, morgen=False):
 
             # Art, zb. "Vegetarisches Gericht"
             message +=  "*" + result + ":*\n"
-            # Name des Gerichts (bzw. des 'Teilgerichts' bei Gericht mit freier Auswahl)
-            message += " •__ " + data[0][result][0] + "__\n"
-            # Bestandteile/Zutaten des Gerichts (Sichtbar wenn '+' auf Seite geklickt)
-            for additionalIngredient in data[0][result][1]:
-                message += "     + _" + additionalIngredient + "_\n"
-            #Preis des Gerichts
-            message += "   " + data[0][result][2] + "\n\n"
+            # the actual meal - usually a type only has one meal, except for the 'free choice' type of meals
+            for actualMeal in data[0][result]:
+                # Name des Gerichts (bzw. des 'Teilgerichts' bei Gericht mit freier Auswahl)
+                message += " •__ " + actualMeal[0] + "__\n"
+                # Bestandteile/Zutaten des Gerichts (Sichtbar wenn '+' auf Seite geklickt)
+                for additionalIngredient in actualMeal[1]:
+                    message += "     + _" + additionalIngredient + "_\n"
+                #Preis des Gerichts
+                message += "   " + actualMeal[2] + "\n\n"
 
         message += " < /heute >  < /morgen >"
         message += "\n < /uebermorgen >"
@@ -186,11 +188,12 @@ class MensaSpider(scrapy.Spider):
 
             result[name] = []
 
-            # for subitem in header.xpath('following-sibling::div/*'):
+
             for subitem in header.xpath('following-sibling::*'):
-                # title-prim ≙ begin of next menu → stop processing
+                # title-prim ≙ begin of next menu type/end of this menu → stop processing
                 if subitem.attrib == {'class': 'title-prim'}:
                     break
+                # accordion u-block: top-level item of a meal type (usually there just is 1 u-block but there can be multiple)
                 elif subitem.attrib == {'class': 'accordion u-block'}:
                     for subsubitem in subitem.xpath('child::section'):
                         
@@ -198,9 +201,7 @@ class MensaSpider(scrapy.Spider):
                         additionalIngredients = subsubitem.xpath('details/ul/li/text()').getall()
                         price = subsubitem.xpath('header/div/div/p/text()[2]').get().strip()
 
-                        result[name] = (title, additionalIngredients, price)
-                        print(result)
-                        # result[name].append((subsubitem.xpath('header/div/div/h4/text()').get(), subsubitem.xpath('header/div/div/p/text()[2]').get().strip()))
+                        result[name].append((title, additionalIngredients, price))
 
         yield result
 
