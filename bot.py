@@ -266,9 +266,12 @@ async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     chat_id=update.effective_chat.id
 
-    
+    current_time = cur.execute("select * from chatids where id=(?)",[chat_id]).fetchone()
 
-    if len(context.args) != 0:
+    if current_time is None:
+        message = "Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen"
+
+    elif len(context.args) != 0:
         try:
             hour, min = parseTime(context.args[0])
 
@@ -278,11 +281,12 @@ async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             message = "Plan wird ab jetzt automatisch an Wochentagen "+ hour+":"+min + " Uhr gesendet."
 
-        except KeyError:
-            await context.bot.send_message(chat_id=chat_id, text="Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen", parse_mode=ParseMode.MARKDOWN)
-            return
+        # except KeyError:
+        #     await context.bot.send_message(chat_id=chat_id, text="Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen", parse_mode=ParseMode.MARKDOWN)
+        #     return
         except ValueError:
-            message = "Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen"
+            message = "Eingegebene Zeit ist ungültig."
+            # message = "Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen"
 
     else:
         message = "Bitte Zeit eingegeben\n( /changetime \[Zeit] )"
@@ -322,7 +326,7 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             hour, min = parseTime(context.args[0])
         except ValueError:
-            await context.bot.send_message(chat_id=chat_id, text="Eingegebene Zeit ist ungültig!", parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(chat_id=chat_id, text="Eingegebene Zeit ist ungültig.", parse_mode=ParseMode.MARKDOWN)
             return
     else:
         hour, min = ("6", "00")
