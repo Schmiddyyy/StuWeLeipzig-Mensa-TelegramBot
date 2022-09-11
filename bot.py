@@ -16,7 +16,8 @@ from datetime import datetime, time, date, timedelta, timezone
 
 import re
 
-
+# the Mensa ID to crawl
+location = 140
 
 
 # job DB init
@@ -104,16 +105,16 @@ def createMessageStringFromSpider(date, morgen=False):
     # Heute ist Mo-Fr (fooden)
     if date.isoweekday() <=5:
         dataDate = date
-        message += "_" + weekdays[dataDate.isoweekday()-1] + dataDate.strftime(", %d.%m.%Y") + "_\n\n"
+        message += "_" + weekdays[dataDate.isoweekday()-1] + dataDate.strftime(", %d.%m.%Y") + "_\n"
 
     # Samstag → Plan für übermorgen laden
     elif date.isoweekday() == 6:
         dataDate = date + timedelta(days=2)
         message += "_" + weekdays[dataDate.isoweekday()-1] + dataDate.strftime(", %d.%m.%Y") 
         if morgen:
-            message += "_\n\n"
+            message += "_\n"
         else:
-            message += " (Übermorgen)_\n\n"
+            message += " (Übermorgen)_\n"
         
     # Sonntag → Plan für morgen laden
     elif date.isoweekday() == 7:
@@ -121,12 +122,12 @@ def createMessageStringFromSpider(date, morgen=False):
         message += "_" + weekdays[dataDate.isoweekday()-1] + dataDate.strftime(", %d.%m.%Y")
         
         if morgen:
-            message += "_\n\n"
+            message += "_\n"
         else:
-            message += " (Morgen)_\n\n"
+            message += " (Morgen)_\n"
 
-
-    job = Job(MensaSpider, start_urls=['https://www.studentenwerk-leipzig.de/mensen-cafeterien/speiseplan?location=140' + '&date=' + str(dataDate)])
+    job = Job(MensaSpider, start_urls=[f'https://www.studentenwerk-leipzig.de/mensen-cafeterien/speiseplan?location={str(location)}&date={str(dataDate)}'])
+    # job = Job(MensaSpider, start_urls=['https://www.studentenwerk-leipzig.de/mensen-cafeterien/speiseplan?location=106' + '&date=' + str(dataDate)])
     processor = Processor(settings=None)  
     data = processor.run(job)
 
@@ -143,7 +144,7 @@ def createMessageStringFromSpider(date, morgen=False):
                 continue
 
             # Art, zb. "Vegetarisches Gericht"
-            message +=  "*" + result + ":*\n"
+            message +=  "\n*" + result + ":*\n"
             # the actual meal - usually a type only has one meal, except for the 'free choice' type of meals
             for actualMeal in data[0][result]:
                 # Name des Gerichts (bzw. des 'Teilgerichts' bei Gericht mit freier Auswahl)
@@ -152,9 +153,9 @@ def createMessageStringFromSpider(date, morgen=False):
                 for additionalIngredient in actualMeal[1]:
                     message += "     + _" + additionalIngredient + "_\n"
                 #Preis des Gerichts
-                message += "   " + actualMeal[2] + "\n\n"
+                message += "   " + actualMeal[2] + "\n"
 
-        message += " < /heute >  < /morgen >"
+        message += "\n < /heute >  < /morgen >"
         message += "\n < /uebermorgen >"
 
 
@@ -163,6 +164,7 @@ def createMessageStringFromSpider(date, morgen=False):
     # required by Markdown V2
 
     message = message.replace(".", "\.")
+    message = message.replace("!", "\!")
     message = message.replace("+", "\+")
     message = message.replace("-", "\-")
     message = message.replace("<", "\<")
@@ -269,24 +271,21 @@ async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 0:
         try:
             hour, min = parseTime(context.args[0])
+
             unregisterJob(id=chat_id)
+            # adding chatid to database (so that job can be recreated @ server restart)
             registerJob(id=chat_id, hour=hour, min=min)
 
-        except ValueError:
-            await context.bot.send_message(chat_id=chat_id, text="Eingegebene Zeit ist ungültig.", parse_mode=ParseMode.MARKDOWN)
+            message = "Plan wird ab jetzt automatisch an Wochentagen "+ hour+":"+min + " Uhr gesendet."
+
+        except KeyError:
+            await context.bot.send_message(chat_id=chat_id, text="Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen", parse_mode=ParseMode.MARKDOWN)
             return
+        except ValueError:
+            message = "Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen"
+
     else:
-        await context.bot.send_message(chat_id=chat_id, text="Bitte Zeit eingegeben\n( /changetime \[Zeit] )", parse_mode=ParseMode.MARKDOWN)
-        return
-     # adding chatid to database (so that job can be recreated @ server restart)
-
-    try:
-        unregisterJob(chat_id)
-        registerJob(chat_id, hour, min)
-        message = "Plan wird ab jetzt automatisch an Wochentagen "+ hour+":"+min + " Uhr gesendet."
-
-    except KeyError:
-        message = "Automatische Nachrichten sind noch nicht aktiviert.\n/subscribe oder\n/subscribe \[Zeit] ausführen"
+        message = "Bitte Zeit eingegeben\n( /changetime \[Zeit] )"
     
     # confirmation message
     await context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
