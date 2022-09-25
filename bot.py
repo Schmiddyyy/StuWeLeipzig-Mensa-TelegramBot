@@ -162,7 +162,6 @@ def createMessageStringFromSpider(date, morgen=False):
     
 
     # required by Markdown V2
-
     message = message.replace(".", "\.")
     message = message.replace("!", "\!")
     message = message.replace("+", "\+")
