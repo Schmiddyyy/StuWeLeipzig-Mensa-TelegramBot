@@ -15,6 +15,7 @@ from scrapyscript import Job, Processor
 from datetime import datetime, time, date, timedelta, timezone
 
 import re
+import requests, ssl, json
 
 # the Mensa ID to crawl
 location = 140
@@ -367,6 +368,26 @@ async def callback_heute(context):
 
     await context.bot.send_message(job.chat_id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
 
+async def getCDReminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id=update.effective_chat.id
+
+    message = ""
+
+    with open('userhash.txt', 'r') as fobj:
+        userhash = fobj.readline().strip()
+
+    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=ssl.CERT_NONE)
+    parsed = json.loads(cd_reminders.content)
+
+    if parsed != {'SEMESTER': 4, 'EXAMS': 0, 'ELECTIVES': 0, 'UPCOMING': [], 'LATEST': []}:
+        for line in parsed:
+            message += (line + " "*(12-len(line)) + str(parsed[line])) + "\n"
+    else:
+        return
+
+    await context.bot.send_message(chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN)
+
+
 
 
 if __name__ == '__main__':
@@ -418,6 +439,12 @@ if __name__ == '__main__':
 
             gettime_handler = CommandHandler('time',  gettime)
             application.add_handler(gettime_handler)
+
+            getCDReminders_handler = CommandHandler('cd',  getCDReminders)
+            application.add_handler(getCDReminders_handler)
+
+            application.job_queue.run_repeating(callback=getCDReminders, interval=60, chat_id=578278860)
+
             
             
             application.run_polling()
