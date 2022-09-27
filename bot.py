@@ -372,34 +372,59 @@ async def getCDReminders(context: ContextTypes.DEFAULT_TYPE):
 
     message = ""
 
+    # expected format: 'user=xxxxxxx&hash=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
     cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=ssl.CERT_NONE)
-    parsed = json.loads(cd_reminders.content)
+    reminders_parsed = json.loads(cd_reminders.text)
+ 
+    exam_stats = requests.get(url=f"https://selfservice.campus-dual.de/dash/getexamstats?{userhash}", verify=ssl.CERT_NONE)
+    stats_parsed = json.loads(exam_stats.text)
 
-    if parsed != {'SEMESTER': 4, 'EXAMS': 0, 'ELECTIVES': 0, 'UPCOMING': [], 'LATEST': []}:
-        for line in parsed:
-            message += (line + " "*(12-len(line)) + str(parsed[line])) + "\n"
-    else:
-        return
+    if stats_parsed != {'EXAMS': 11, 'SUCCESS': 6, 'FAILURE': 5, 'WPCOUNT': 5, 'MODULES': 5, 'BOOKED': 0, 'MBOOKED': 6}:
+        for line in stats_parsed:
+            message += (line + " "*(12-len(line)) + str(stats_parsed[line])) + "\n"
+        message += "\n"
 
-    await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
+
+
+    if reminders_parsed != {'SEMESTER': 4, 'EXAMS': 0, 'ELECTIVES': 0, 'UPCOMING': [], 'LATEST': []}:
+        for line in reminders_parsed:
+            message += (line + " "*(12-len(line)) + str(reminders_parsed[line])) + "\n"
+
+    if len(message) != 0:
+        await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
 
 async def forceCDreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
-    chat_id=update.effective_chat.id
     message = ""
 
+    # expected format: 'user=xxxxxxx&hash=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
     cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=ssl.CERT_NONE)
-    parsed = json.loads(cd_reminders.content)
+    reminders_parsed = json.loads(cd_reminders.text)
+ 
+    exam_stats = requests.get(url=f"https://selfservice.campus-dual.de/dash/getexamstats?{userhash}", verify=ssl.CERT_NONE)
+    stats_parsed = json.loads(exam_stats.text)
+
+    if stats_parsed == {'EXAMS': 11, 'SUCCESS': 6, 'FAILURE': 5, 'WPCOUNT': 5, 'MODULES': 5, 'BOOKED': 0, 'MBOOKED': 6}:
+        message += "keine Ergebnisse\n"
+    else:
+        for line in stats_parsed:
+            message += (line + " "*(12-len(line)) + str(stats_parsed[line])) + "\n"
+        message += "\n"
 
 
-    for line in parsed:
-        message += (line + " "*(12-len(line)) + str(parsed[line])) + "\n"
+
+    if reminders_parsed == {'SEMESTER': 4, 'EXAMS': 0, 'ELECTIVES': 0, 'UPCOMING': [], 'LATEST': []}:
+        message += "keine Newz"
+    else:
+        message += "\n"
+        for line in reminders_parsed:
+            message += (line + " "*(12-len(line)) + str(reminders_parsed[line])) + "\n"
 
 
     await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
