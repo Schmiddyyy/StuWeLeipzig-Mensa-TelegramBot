@@ -376,10 +376,10 @@ async def getCDReminders(context: ContextTypes.DEFAULT_TYPE):
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
-    exam_stats = requests.get(url=f"https://selfservice.campus-dual.de/dash/getexamstats?{userhash}")
+    exam_stats = requests.get(url=f"https://selfservice.campus-dual.de/dash/getexamstats?{userhash}", verify=ssl.CERT_NONE)
     stats_parsed = json.loads(exam_stats.text)
 
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}")
+    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=ssl.CERT_NONE)
     reminders_parsed = json.loads(cd_reminders.text)
 
 
@@ -408,7 +408,7 @@ async def forceCDreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}")
+    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=ssl.CERT_NONE)
     reminders_parsed = json.loads(cd_reminders.text)
 
 
