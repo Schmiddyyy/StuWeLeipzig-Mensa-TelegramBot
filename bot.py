@@ -376,24 +376,28 @@ async def getCDReminders(context: ContextTypes.DEFAULT_TYPE):
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=ssl.CERT_NONE)
-    reminders_parsed = json.loads(cd_reminders.text)
- 
-    exam_stats = requests.get(url=f"https://selfservice.campus-dual.de/dash/getexamstats?{userhash}", verify=ssl.CERT_NONE)
+    exam_stats = requests.get(url=f"https://selfservice.campus-dual.de/dash/getexamstats?{userhash}")
     stats_parsed = json.loads(exam_stats.text)
 
-    if stats_parsed != {'EXAMS': 11, 'SUCCESS': 6, 'FAILURE': 5, 'WPCOUNT': 5, 'MODULES': 5, 'BOOKED': 0, 'MBOOKED': 6}:
-        for line in stats_parsed:
-            message += (line + " "*(12-len(line)) + str(stats_parsed[line])) + "\n"
-        message += "\n"
+    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}")
+    reminders_parsed = json.loads(cd_reminders.text)
 
 
+    # hardcoded shit
+    stats_alt = {'EXAMS': 12, 'SUCCESS': 7, 'FAILURE': 5, 'WPCOUNT': 5, 'MODULES': 6, 'BOOKED': 0, 'MBOOKED': 7}
+    reminders_alt = {'SEMESTER': 4, 'EXAMS': 0, 'ELECTIVES': 0, 'UPCOMING': [], 'LATEST': [{'AWOTYPE': 'Studienmodul', 'AWOBJECT_SHORT': '5CS-ENG1W-00', 'AWOBJECT': 'P Wirtschaftsenglisch u. Kommunikat. (K)', 'AWSTATUS': 'Erfolgreich abgeschlossen', 'AGRTYPE': 'Teilleistungsbeurteilung', 'CPGRADED': '  0.00000', 'CPUNIT': 'ECTS-Credits', 'ACAD_YEAR': 'Akad. Jahr 2021/2022', 'ACAD_SESSION': 'Sommerperiode', 'AGRDATE': '20220914', 'BOOKDATE': '20220608', 'GRADESYMBOL': '1,3', 'BOOKREASON': ''}]}
+    ###
 
-    if reminders_parsed != {'SEMESTER': 4, 'EXAMS': 0, 'ELECTIVES': 0, 'UPCOMING': [], 'LATEST': []}:
-        for line in reminders_parsed:
-            message += (line + " "*(12-len(line)) + str(reminders_parsed[line])) + "\n"
+    acknowlegded = ['5CS-ENG1W-00']
 
-    if len(message) != 0:
+    if stats_parsed != stats_alt or reminders_parsed != reminders_alt:
+        for ergebnis in reminders_parsed['LATEST']:
+            if ergebnis['AWOBJECT_SHORT'] not in acknowlegded:
+                if len(message) > 0:
+                    message += "\n\n"
+                message += ergebnis['AWOBJECT'] + "\n"
+                message += ergebnis['GRADESYMBOL']
+
         await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
 
 async def forceCDreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -404,27 +408,15 @@ async def forceCDreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=ssl.CERT_NONE)
+    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}")
     reminders_parsed = json.loads(cd_reminders.text)
- 
-    exam_stats = requests.get(url=f"https://selfservice.campus-dual.de/dash/getexamstats?{userhash}", verify=ssl.CERT_NONE)
-    stats_parsed = json.loads(exam_stats.text)
-
-    if stats_parsed == {'EXAMS': 11, 'SUCCESS': 6, 'FAILURE': 5, 'WPCOUNT': 5, 'MODULES': 5, 'BOOKED': 0, 'MBOOKED': 6}:
-        message += "keine Ergebnisse\n"
-    else:
-        for line in stats_parsed:
-            message += (line + " "*(12-len(line)) + str(stats_parsed[line])) + "\n"
-        message += "\n"
 
 
-
-    if reminders_parsed == {'SEMESTER': 4, 'EXAMS': 0, 'ELECTIVES': 0, 'UPCOMING': [], 'LATEST': []}:
-        message += "keine Newz"
-    else:
-        message += "\n"
-        for line in reminders_parsed:
-            message += (line + " "*(12-len(line)) + str(reminders_parsed[line])) + "\n"
+    for ergebnis in reminders_parsed['LATEST']:
+        if len(message) > 0:
+            message += "\n\n"
+        message += ergebnis['AWOBJECT'] + "\n"
+        message += ergebnis['GRADESYMBOL']
 
 
     await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
