@@ -1,10 +1,9 @@
 import json
 import logging
 import re
-import ssl
 from datetime import date, datetime, time, timedelta, timezone
 
-import certifi
+
 import requests
 import scrapy
 import urllib3
@@ -18,15 +17,16 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 # the Mensa ID to crawl
 location = 140
 
-
 # job DB init
 import sqlite3
-
 con = sqlite3.connect("jobs.db")
 cur = con.cursor()
 
+# i'm as disappointed as you are.
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-logging.basicConfig(level=logging.INFO,
+# logging format config
+logging.basicConfig(level=logging.WARN,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
@@ -35,7 +35,18 @@ logging.basicConfig(level=logging.INFO,
 loadedJobs = {}
 
 
-
+# required by Markdown V2
+def Markdown2Formatter(text):
+    text = text.replace(".", "\.")
+    text = text.replace("!", "\!")
+    text = text.replace("+", "\+")
+    text = text.replace("-", "\-")
+    text = text.replace("<", "\<")
+    text = text.replace(">", "\>")
+    text = text.replace("(", "\(")
+    text = text.replace(")", "\)")
+    
+    return text
 
 
 def registerJob(id, hour, min):
@@ -159,18 +170,8 @@ def createMessageStringFromSpider(date, morgen=False):
         message += "\n < /uebermorgen >"
 
 
-    
 
-    # required by Markdown V2
-    message = message.replace(".", "\.")
-    message = message.replace("!", "\!")
-    message = message.replace("+", "\+")
-    message = message.replace("-", "\-")
-    message = message.replace("<", "\<")
-    message = message.replace(">", "\>")
-    message = message.replace("(", "\(")
-    message = message.replace(")", "\)")
-
+    message = Markdown2Formatter(message)
     return message
 
 
@@ -250,12 +251,6 @@ async def dbg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     dataDate = date.today().replace(year=year, month=month, day=day)
 
     message = createMessageStringFromSpider(dataDate)
-    
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
-
-
-async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = createMessageStringFromSpider(date.today() + timedelta(days=1), morgen=True)
     
     await context.bot.send_message(chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
 
@@ -375,15 +370,7 @@ async def getCDReminders(context: ContextTypes.DEFAULT_TYPE):
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
-
-    
-        http = urllib3.PoolManager(
-            cert_reqs='CERT_REQUIRED',
-            ca_certs=certifi.where()
-        )
-
-
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=True)
+    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=False)
     reminders_parsed = json.loads(cd_reminders.text)
 
 
@@ -412,12 +399,7 @@ async def forceCDreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
-    http = urllib3.PoolManager(
-        cert_reqs='CERT_REQUIRED',
-        ca_certs=certifi.where()
-    )
-
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=True)
+    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=False)
     reminders_parsed = json.loads(cd_reminders.text)
 
 
