@@ -383,7 +383,7 @@ async def getCDReminders(context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-    cd_reminders = http.request(method='POST', url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}")
+    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=True)
     reminders_parsed = json.loads(cd_reminders.text)
 
 
@@ -417,7 +417,7 @@ async def forceCDreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ca_certs=certifi.where()
     )
 
-    cd_reminders = http.request(method='GET', url="https://selfservice.campus-dual.de/dash/getreminders?{userhash}")
+    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=True)
     reminders_parsed = json.loads(cd_reminders.text)
 
 
