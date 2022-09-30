@@ -1,21 +1,19 @@
+import json
+import logging
+import re
+import ssl
+from datetime import date, datetime, time, timedelta, timezone
+
+import certifi
+import requests
+import scrapy
+import urllib3
 from pid import PidFile
 from pid.base import PidFileAlreadyLockedError
-
-
-import logging
-
+from scrapyscript import Job, Processor
 from telegram import Update
 from telegram.constants import ParseMode
-from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
-
-import scrapy
-from scrapyscript import Job, Processor
-
-
-from datetime import datetime, time, date, timedelta, timezone
-
-import re
-import requests, ssl, json
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # the Mensa ID to crawl
 location = 140
@@ -23,6 +21,7 @@ location = 140
 
 # job DB init
 import sqlite3
+
 con = sqlite3.connect("jobs.db")
 cur = con.cursor()
 
@@ -376,28 +375,33 @@ async def getCDReminders(context: ContextTypes.DEFAULT_TYPE):
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
-    exam_stats = requests.get(url=f"https://selfservice.campus-dual.de/dash/getexamstats?{userhash}", verify=ssl.CERT_NONE)
-    stats_parsed = json.loads(exam_stats.text)
 
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=ssl.CERT_NONE)
+    
+        http = urllib3.PoolManager(
+            cert_reqs='CERT_REQUIRED',
+            ca_certs=certifi.where()
+        )
+
+
+    cd_reminders = http.request(method='POST', url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}")
     reminders_parsed = json.loads(cd_reminders.text)
 
 
-    # hardcoded shit
-    stats_alt = {'EXAMS': 12, 'SUCCESS': 7, 'FAILURE': 5, 'WPCOUNT': 5, 'MODULES': 6, 'BOOKED': 0, 'MBOOKED': 7}
-    reminders_alt = {'SEMESTER': 4, 'EXAMS': 0, 'ELECTIVES': 0, 'UPCOMING': [], 'LATEST': [{'AWOTYPE': 'Studienmodul', 'AWOBJECT_SHORT': '5CS-ENG1W-00', 'AWOBJECT': 'P Wirtschaftsenglisch u. Kommunikat. (K)', 'AWSTATUS': 'Erfolgreich abgeschlossen', 'AGRTYPE': 'Teilleistungsbeurteilung', 'CPGRADED': '  0.00000', 'CPUNIT': 'ECTS-Credits', 'ACAD_YEAR': 'Akad. Jahr 2021/2022', 'ACAD_SESSION': 'Sommerperiode', 'AGRDATE': '20220914', 'BOOKDATE': '20220608', 'GRADESYMBOL': '1,3', 'BOOKREASON': ''}]}
-    ###
+    with open("acknowledged.txt", "r") as fobj:
+        acknowlegded = list()
+        for line in fobj:
+            acknowlegded.append(line.strip())
 
-    acknowlegded = ['5CS-ENG1W-00']
+    for ergebnis in reminders_parsed['LATEST']:
+        if ergebnis['AWOBJECT_SHORT'] not in acknowlegded:
+            if len(message) > 0:
+                message += "\n\n"
+            
+            message += "*" + ergebnis['AWOBJECT_SHORT'] + "*\n"
+            message += ergebnis['AWOBJECT'] + "\n"
+            message += ergebnis['GRADESYMBOL']
 
-    if stats_parsed != stats_alt or reminders_parsed != reminders_alt:
-        for ergebnis in reminders_parsed['LATEST']:
-            if ergebnis['AWOBJECT_SHORT'] not in acknowlegded:
-                if len(message) > 0:
-                    message += "\n\n"
-                message += ergebnis['AWOBJECT'] + "\n"
-                message += ergebnis['GRADESYMBOL']
-
+    if len(message) != 0:
         await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
 
 async def forceCDreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -408,17 +412,58 @@ async def forceCDreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with open('userhash.txt', 'r') as fobj:
         userhash = fobj.readline().strip()
 
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=ssl.CERT_NONE)
+    http = urllib3.PoolManager(
+        cert_reqs='CERT_REQUIRED',
+        ca_certs=certifi.where()
+    )
+
+    cd_reminders = http.request(method='GET', url="https://selfservice.campus-dual.de/dash/getreminders?{userhash}")
     reminders_parsed = json.loads(cd_reminders.text)
 
 
     for ergebnis in reminders_parsed['LATEST']:
         if len(message) > 0:
             message += "\n\n"
+        
+        message += "*" + ergebnis['AWOBJECT_SHORT'] + "*\n"
         message += ergebnis['AWOBJECT'] + "\n"
         message += ergebnis['GRADESYMBOL']
 
 
+    await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
+
+
+async def acknowledge(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = ""
+
+    if len(context.args) == 0:
+        # get currently acknowledged
+        with open('acknowledged.txt', 'r') as fobj:
+            linecount = int()
+            message = "Currently acknowledged:\n\n"
+
+            for line in fobj:
+                message += line
+                linecount += 1
+
+            if linecount == 0:
+                message += "keine Acknowledgements vorhanden"
+
+    elif context.args[0] == "reset":
+        with open('acknowledged.txt', 'w') as fobj:
+            message += "Acknowledgements have been reset"
+
+    else:
+        with open('acknowledged.txt', 'a') as fobj:
+            if len(context.args) == 1:
+                fobj.write(context.args[0].strip())
+                message += f"{context.args[0].strip()} wurde acknowledged"
+            else: 
+                for arg in context.args:
+                    fobj.write(arg.strip())
+                    message += arg + " "
+                message += "wurde acknowledged"
+    
     await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
 
 
@@ -476,6 +521,9 @@ if __name__ == '__main__':
 
             forceCDreminders_handler = CommandHandler('cd',  forceCDreminders)
             application.add_handler(forceCDreminders_handler)
+
+            ack_handler = CommandHandler('ack', acknowledge)
+            application.add_handler(ack_handler)
 
             application.job_queue.run_repeating(callback=getCDReminders, interval=60, chat_id=578278860)
 
