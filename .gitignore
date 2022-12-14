@@ -7,3 +7,4 @@ testparser.py
 acknowledged.txt
 
 playwright-cd.py
+login_creds.txt

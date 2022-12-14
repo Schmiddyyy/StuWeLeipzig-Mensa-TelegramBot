@@ -3,12 +3,12 @@ import logging
 import re
 from datetime import date, datetime, time, timedelta, timezone
 
-
 import requests
 import scrapy
 import urllib3
 from pid import PidFile
 from pid.base import PidFileAlreadyLockedError
+from playwright.async_api import async_playwright
 from scrapyscript import Job, Processor
 from telegram import Update
 from telegram.constants import ParseMode
@@ -19,6 +19,7 @@ location = 140
 
 # job DB init
 import sqlite3
+
 con = sqlite3.connect("jobs.db")
 cur = con.cursor()
 
@@ -362,55 +363,83 @@ async def callback_heute(context):
 
     await context.bot.send_message(job.chat_id, text=message, parse_mode=ParseMode.MARKDOWN_V2)
 
-async def getCDReminders(context: ContextTypes.DEFAULT_TYPE):
 
-    message = ""
+async def playwright_fetch_grades() -> list:
+    with open('login_creds.txt', 'r') as fobj:
+        uname, pw = fobj.readline().strip().split(",")
 
-    # expected format: 'user=xxxxxxx&hash=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-    with open('userhash.txt', 'r') as fobj:
-        userhash = fobj.readline().strip()
+    grades = list()
 
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=False)
-    reminders_parsed = json.loads(cd_reminders.text)
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
+
+        await page.goto("https://erp.campus-dual.de/sap/bc/webdynpro/sap/zba_initss?sap-client=100&sap-language=de&uri=https://selfservice.campus-dual.de/index/login")
+        await page.get_by_role("textbox", name="Benutzer").click()
+        await page.get_by_role("textbox", name="Benutzer").fill(uname)
+        await page.locator("#sap-password").click()
+        await page.get_by_role("textbox", name="Kennwort").fill(pw)
+        await page.get_by_role("button", name="Anmelden").click()
+
+        await page.goto("https://selfservice.campus-dual.de/acwork/index")
 
 
-    with open("acknowledged.txt", "r") as fobj:
-        acknowlegded = list()
-        for line in fobj:
-            acknowlegded.append(line.strip())
+        table = page.locator("#acwork tbody")
+        top_level_lines = table.locator(".child-of-node-0")
 
-    for ergebnis in reminders_parsed['LATEST']:
-        if ergebnis['AWOBJECT_SHORT'] not in acknowlegded:
-            if len(message) > 0:
-                message += "\n\n"
+        count_top_level_lines = await top_level_lines.count()
+        # refs_all_children = []
+
+        for i in range(count_top_level_lines):
+            top_level_line = top_level_lines.nth(i)
+            top_level_line_id = await top_level_line.get_attribute("id")
+            top_level_line_contents = top_level_line.locator("td")
+
+
+            name = await top_level_line_contents.nth(0).inner_text()
+            grade = await top_level_line_contents.nth(1).inner_text()
+            count_sublines = await table.locator(f".child-of-{top_level_line_id}").count()
+
+            # returning name of course, received (aggregate) grade, and amount of sub grades (as a newly released sub grade doesn't always change aggregate score)
+            grades.append((name, grade, str(count_sublines)))
             
-            message += "*" + ergebnis['AWOBJECT_SHORT'] + "*\n"
-            message += ergebnis['AWOBJECT'] + "\n"
-            message += ergebnis['GRADESYMBOL']
 
-    if len(message) != 0:
-        await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
+        await context.close()
+        await browser.close()
+        
+        return grades
+    
 
-async def forceCDreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+
+async def getGrades(context: ContextTypes.DEFAULT_TYPE):
     
     message = ""
+    grades = await playwright_fetch_grades()
 
-    # expected format: 'user=xxxxxxx&hash=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'
-    with open('userhash.txt', 'r') as fobj:
-        userhash = fobj.readline().strip()
-
-    cd_reminders = requests.get(url=f"https://selfservice.campus-dual.de/dash/getreminders?{userhash}", verify=False)
-    reminders_parsed = json.loads(cd_reminders.text)
+    acknowlegded = list()
+    with open("acknowledged.txt", "r") as fobj:
+        for line in fobj:
+            acknowlegded.append((line.split(";")[0], line.split(";")[1], line.split(";")[2].strip()))
 
 
-    for ergebnis in reminders_parsed['LATEST']:
-        if len(message) > 0:
-            message += "\n\n"
-        
-        message += "*" + ergebnis['AWOBJECT_SHORT'] + "*\n"
-        message += ergebnis['AWOBJECT'] + "\n"
-        message += ergebnis['GRADESYMBOL']
+    for grade in grades:
+        if grade not in acknowlegded:
+            message += f"\n{grade[1]}:\n{grade[0]}\n"
 
+
+    if message:
+        await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
+
+async def forceGetGrades(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+    message = ""
+    grades = await playwright_fetch_grades()
+
+
+    for grade in grades:
+        message += f"\n{grade[0]}\n{grade[1]}\n{grade[2]}\n"
 
     await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
 
@@ -425,7 +454,7 @@ async def acknowledge(update: Update, context: ContextTypes.DEFAULT_TYPE):
             message = "Currently acknowledged:\n\n"
 
             for line in fobj:
-                message += line
+                message += f'{line.split(";")[1]}: {line.split(";")[0]}\n'
                 linecount += 1
 
             if linecount == 0:
@@ -435,16 +464,13 @@ async def acknowledge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open('acknowledged.txt', 'w') as fobj:
             message += "Acknowledgements have been reset"
 
-    else:
-        with open('acknowledged.txt', 'a') as fobj:
-            if len(context.args) == 1:
-                fobj.write(context.args[0].strip())
-                message += f"{context.args[0].strip()} wurde acknowledged"
-            else: 
-                for arg in context.args:
-                    fobj.write(arg.strip())
-                    message += arg + " "
-                message += "wurde acknowledged"
+    elif context.args[0] == "all":
+        grades = await playwright_fetch_grades()
+        with open('acknowledged.txt', 'w') as fobj:
+            for grade in grades:
+                fobj.write(f"{grade[0]};{grade[1]};{grade[2]}\n")
+        message += "Alle aktuellen Ergebnisse werden ignoriert"
+            
     
     await context.bot.send_message(chat_id=578278860, text=message, parse_mode=ParseMode.MARKDOWN)
 
@@ -501,13 +527,13 @@ if __name__ == '__main__':
             gettime_handler = CommandHandler('time',  gettime)
             application.add_handler(gettime_handler)
 
-            forceCDreminders_handler = CommandHandler('cd',  forceCDreminders)
-            application.add_handler(forceCDreminders_handler)
+            forceGetGrades_handler = CommandHandler('cd',  forceGetGrades)
+            application.add_handler(forceGetGrades_handler)
 
             ack_handler = CommandHandler('ack', acknowledge)
             application.add_handler(ack_handler)
 
-            application.job_queue.run_repeating(callback=getCDReminders, interval=60, chat_id=578278860)
+            application.job_queue.run_repeating(callback=getGrades, interval=300, chat_id=578278860)
 
             
             
