@@ -1,10 +1,9 @@
-token.txt
-jobs.db
 __pycache__
-CAScraper.py
-userhash.txt
-testparser.py
-acknowledged.txt
-
-playwright-cd.py
+token.txt
 login_creds.txt
+userhash.txt
+acknowledged.txt
+jobs.db
+CAScraper.py
+testparser.py
+playwright-cd.py
