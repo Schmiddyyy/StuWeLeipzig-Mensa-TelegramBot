@@ -88,7 +88,7 @@ def loadJobs():
         data = cur.execute("select * from chatids").fetchall()
     except sqlite3.OperationalError as e:
         logging.critical(f"sqlite3 is not properly set up. Exception: '{str(e)}'")
-        logging.critical("run DB_RESET to reset (will delete everything)")
+        logging.critical("run DB_RESET.py to reset (will delete everything)")
         exit()
 
     for line in data:
