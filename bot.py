@@ -1,9 +1,7 @@
-import json
 import logging
 import re
 from datetime import date, datetime, time, timedelta, timezone
 
-import requests
 import scrapy
 import urllib3
 from pid import PidFile
@@ -139,7 +137,6 @@ def createMessageStringFromSpider(date, morgen=False):
             message += " (Morgen)_\n"
 
     job = Job(MensaSpider, start_urls=[f'https://www.studentenwerk-leipzig.de/mensen-cafeterien/speiseplan?location={str(location)}&date={str(dataDate)}'])
-    # job = Job(MensaSpider, start_urls=['https://www.studentenwerk-leipzig.de/mensen-cafeterien/speiseplan?location=106' + '&date=' + str(dataDate)])
     processor = Processor(settings=None)  
     data = processor.run(job)
 
@@ -451,7 +448,6 @@ async def acknowledge(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # get currently acknowledged
         with open('acknowledged.txt', 'r') as fobj:
             linecount = int()
-            message = "Currently acknowledged:\n\n"
 
             for line in fobj:
                 message += f'{line.split(";")[1]}: {line.split(";")[0]}\n'
@@ -534,8 +530,6 @@ if __name__ == '__main__':
             application.add_handler(ack_handler)
 
             application.job_queue.run_repeating(callback=getGrades, interval=300, chat_id=578278860)
-
-            
             
             application.run_polling()
 
