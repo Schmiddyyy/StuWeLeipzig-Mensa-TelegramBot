@@ -2,6 +2,7 @@ import logging
 import re
 import sqlite3
 from datetime import date, datetime, time, timedelta, timezone
+from warnings import filterwarnings
 
 import scrapy
 from pid import PidFile
@@ -11,6 +12,7 @@ from scrapyscript import Job, Processor
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.warnings import PTBUserWarning
 
 class JobManager:
     con = sqlite3.connect("jobs.db")
@@ -67,6 +69,9 @@ class JobManager:
         return time
 
 def main():
+    # silence warning that i'm aware of
+    filterwarnings(action="ignore", category=PTBUserWarning, message="Prior to v20.0 the `days` parameter was not aligned to that of cron's weekday scheme.We recommend double checking if the passed value is correct.")
+
     # if pidfile exists ≙ program is already running: catch the pidfilelocked exc, exit()
     try:
         # prevents multiple instances of this script to run at the same time → easy way to restart in case of error
