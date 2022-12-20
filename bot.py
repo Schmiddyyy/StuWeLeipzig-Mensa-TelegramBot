@@ -26,100 +26,6 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from telegram.warnings import PTBUserWarning
 
 
-class JobManager:
-    """manages restoring jobs at startup, creating new jobs and unloading jobs.
-    these jobs refer to automatically sending today's meal to a subscribed chat id,
-    using a user-defined time of day"""
-
-    con = sqlite3.connect("jobs.db")
-    cur = con.cursor()
-    loaded_jobs = {}
-    application = None
-
-    def __init__(self, application=None):
-        """application ref is optional and is used to load/unload jobs
-        application is passed at"""
-        if application is not None:
-            JobManager.application = application
-
-    def conv_to_utc(self, hour, minute) -> time:
-        """PTB uses utc time internally, so MESZ has to be converted first"""
-
-        # using current day as basis for conversion
-        # this WILL fail any time the timezone changes after the job has been loaded
-        # a bot restart is sufficient as a workaround
-        local_date = datetime.now().replace(hour=hour, minute=minute)
-
-        # converting date to UTC
-        utc_date = local_date.astimezone(tz=timezone.utc)
-
-        # extracting time from date
-        utc_time = time(hour=utc_date.hour, minute=utc_date.minute)
-
-        return utc_time
-
-    def load_jobs(self) -> None:
-        """restores jobs from from DB using chat_id, hour, min
-        also converts hour/min from De/Berlin to utc time"""
-        try:
-            data = JobManager.cur.execute(
-                "select id, hour, min from chatids"
-            ).fetchall()
-        except sqlite3.OperationalError as exc:
-            logging.critical("sqlite3 is not properly set up: '%s'", str(exc))
-            logging.critical("run DB_RESET.py to reset (will delete everything)")
-            sys.exit()
-
-        for line in data:
-            utc_time = self.conv_to_utc(hour=int(line[1]), minute=int(line[2]))
-
-            job_reference = JobManager.application.job_queue.run_daily(
-                callback=job_send_today_meals,
-                time=utc_time,
-                days=(0, 1, 2, 3, 4, 5, 6),
-                chat_id=int(line[0]),
-            )
-            JobManager.loaded_jobs[int(line[0])] = job_reference
-
-    def add_job(self, chat_id: int, hour: int, minute: int) -> None:
-        """adds a job to DB and then loads it"""
-
-        JobManager.cur.execute(
-            "insert into chatids values(?,?,?)", [chat_id, hour, minute]
-        )
-        JobManager.con.commit()
-
-        utc_time = self.conv_to_utc(hour=hour, minute=minute)
-
-        # starting the job
-        job_reference = JobManager.application.job_queue.run_daily(
-            callback=job_send_today_meals,
-            time=utc_time,
-            days=(0, 1, 2, 3, 4, 5, 6),
-            chat_id=chat_id,
-        )
-
-        # saving the ref to loaded job (so that it can be unloaded)
-        JobManager.loaded_jobs[chat_id] = job_reference
-
-    def remove_job(self, chat_id: int) -> None:
-        """removes a job from DB and then unloads it"""
-
-        JobManager.cur.execute("delete from chatids where id = (?)", [chat_id])
-        JobManager.con.commit()
-
-        JobManager.loaded_jobs[chat_id].schedule_removal()
-        del JobManager.loaded_jobs[chat_id]
-
-    def get_job_time(self, chat_id: int) -> tuple[str, str]:
-        """retrieves the time at which a job for a given chat id will be run"""
-
-        job_time = JobManager.cur.execute(
-            "select hour,min from chatids where id=(?)", [chat_id]
-        ).fetchone()
-        return job_time
-
-
 def main():
     """sets up the bot (using token), defines bot command handlers, configures logging and warnings,
     and ensures only one instance is ever running.
@@ -214,27 +120,146 @@ def main():
         sys.exit()
 
 
-def markdown_v2_formatter(text: str) -> str:
-    """used for escaping special Markdown V2 characters using backslash.
-    can only be used for strings that should not contain formatting,
-    as formatting is defined using these characters"""
-    text = text.replace(".", r"\.")
-    text = text.replace("!", r"\!")
-    text = text.replace("+", r"\+")
-    text = text.replace("-", r"\-")
-    text = text.replace("<", r"\<")
-    text = text.replace(">", r"\>")
-    text = text.replace("(", r"\(")
-    text = text.replace(")", r"\)")
-    text = text.replace("=", r"\=")
+class JobManager:
+    """manages restoring jobs at startup, creating new jobs and unloading jobs.
+    these jobs refer to automatically sending today's meal to a subscribed chat id,
+    using a user-defined time of day"""
 
-    return text
+    con = sqlite3.connect("jobs.db")
+    cur = con.cursor()
+    loaded_jobs = {}
+    application = None
+
+    def __init__(self, application=None):
+        """application ref is optional and is used to load/unload jobs
+        application is passed at"""
+        if application is not None:
+            JobManager.application = application
+
+    def conv_to_utc(self, hour, minute) -> time:
+        """PTB uses utc time internally, so MESZ has to be converted first"""
+
+        # using current day as basis for conversion
+        # this WILL fail any time the timezone changes after the job has been loaded
+        # a bot restart is sufficient as a workaround
+        local_date = datetime.now().replace(hour=hour, minute=minute)
+
+        # converting date to UTC
+        utc_date = local_date.astimezone(tz=timezone.utc)
+
+        # extracting time from date
+        utc_time = time(hour=utc_date.hour, minute=utc_date.minute)
+
+        return utc_time
+
+    def load_jobs(self) -> None:
+        """restores jobs from from DB using chat_id, hour, min
+        also converts hour/min from De/Berlin to utc time"""
+        try:
+            data = JobManager.cur.execute(
+                "select id, hour, min from chatids"
+            ).fetchall()
+        except sqlite3.OperationalError as exc:
+            logging.critical("sqlite3 is not properly set up: '%s'", str(exc))
+            logging.critical("run DB_RESET.py to reset (will delete everything)")
+            sys.exit()
+
+        for line in data:
+            utc_time = self.conv_to_utc(hour=int(line[1]), minute=int(line[2]))
+
+            job_reference = JobManager.application.job_queue.run_daily(
+                callback=job_send_today_meals,
+                time=utc_time,
+                days=(0, 1, 2, 3, 4, 5, 6),
+                chat_id=int(line[0]),
+            )
+            JobManager.loaded_jobs[int(line[0])] = job_reference
+
+    def add_job(self, chat_id: int, hour: int, minute: int) -> None:
+        """adds a job to DB and then loads it"""
+
+        JobManager.cur.execute(
+            "insert into chatids values(?,?,?)", [chat_id, hour, minute]
+        )
+        JobManager.con.commit()
+
+        utc_time = self.conv_to_utc(hour=hour, minute=minute)
+
+        # starting the job
+        job_reference = JobManager.application.job_queue.run_daily(
+            callback=job_send_today_meals,
+            time=utc_time,
+            days=(0, 1, 2, 3, 4, 5, 6),
+            chat_id=chat_id,
+        )
+
+        # saving the ref to loaded job (so that it can be unloaded)
+        JobManager.loaded_jobs[chat_id] = job_reference
+
+    def remove_job(self, chat_id: int) -> None:
+        """removes a job from DB and then unloads it"""
+
+        JobManager.cur.execute("delete from chatids where id = (?)", [chat_id])
+        JobManager.con.commit()
+
+        JobManager.loaded_jobs[chat_id].schedule_removal()
+        del JobManager.loaded_jobs[chat_id]
+
+    def get_job_time(self, chat_id: int) -> tuple[str, str]:
+        """retrieves the time at which a job for a given chat id will be run"""
+
+        job_time = JobManager.cur.execute(
+            "select hour,min from chatids where id=(?)", [chat_id]
+        ).fetchone()
+        return job_time
+
+
+###### crawler setup and stuff
+class MensaSpider(scrapy.Spider):
+    """scrapy Spider instance that scrapes data from Studentenwerk Leipzig.
+    Has to be instantiated using URL with date parameter"""
+
+    name = "mensaplan"
+
+    def parse(self, response, **kwargs):
+        result = {}
+
+        result["date"] = response.css(
+            'select#edit-date>option[selected="selected"]::text'
+        ).get()
+
+        for header in response.css("h3.title-prim"):
+            name = header.xpath("text()").get()
+
+            result[name] = []
+
+            for subitem in header.xpath("following-sibling::*"):
+                # title-prim ≙ begin of next menu type/end of this menu → stop processing
+                if subitem.attrib == {"class": "title-prim"}:
+                    break
+                # accordion u-block: top-level item of a meal type
+                # (usually there just is 1 u-block but there can be multiple)
+                if subitem.attrib == {"class": "accordion u-block"}:
+                    for subsubitem in subitem.xpath("child::section"):
+
+                        title = subsubitem.xpath("header/div/div/h4/text()").get()
+                        additional_ingredients = subsubitem.xpath(
+                            "details/ul/li/text()"
+                        ).getall()
+                        price = (
+                            subsubitem.xpath("header/div/div/p/text()[2]").get().strip()
+                        )
+
+                        result[name].append((title, additional_ingredients, price))
+
+        yield result
 
 
 def mensa_data_to_string(mensa_data, using_date) -> str:
     """formats the raw data that is returned from MensaSpider.
     Also check the date of returned data, since the site falls back to
     current date instead of requested date if it is too far in the future"""
+
     sub_message = ""
 
     # when a date is requested that is too far in the future, the site will load the current date
@@ -353,50 +378,41 @@ def generate_mensa_message(input_date: date, user_aware_future_day: bool = False
     return message
 
 
-###### crawler setup and stuff
-class MensaSpider(scrapy.Spider):
-    """scrapy Spider instance that scrapes data from Studentenwerk Leipzig.
-    Has to be instantiated using URL with date parameter"""
+def markdown_v2_formatter(text: str) -> str:
+    """used for escaping special Markdown V2 characters using backslash.
+    can only be used for strings that should not contain formatting,
+    as formatting is defined using these characters"""
 
-    name = "mensaplan"
+    text = text.replace(".", r"\.")
+    text = text.replace("!", r"\!")
+    text = text.replace("+", r"\+")
+    text = text.replace("-", r"\-")
+    text = text.replace("<", r"\<")
+    text = text.replace(">", r"\>")
+    text = text.replace("(", r"\(")
+    text = text.replace(")", r"\)")
+    text = text.replace("=", r"\=")
 
-    def parse(self, response, **kwargs):
-        result = {}
+    return text
 
-        result["date"] = response.css(
-            'select#edit-date>option[selected="selected"]::text'
-        ).get()
 
-        for header in response.css("h3.title-prim"):
-            name = header.xpath("text()").get()
+def parse_time(str_time: str) -> tuple[int, int]:
+    """checks time string for validity (regex), and if successful, returns ints Hours, Mins"""
 
-            result[name] = []
+    pattern = "([01]?[0-9]|2[0-3]):[0-5][0-9]"
 
-            for subitem in header.xpath("following-sibling::*"):
-                # title-prim ≙ begin of next menu type/end of this menu → stop processing
-                if subitem.attrib == {"class": "title-prim"}:
-                    break
-                # accordion u-block: top-level item of a meal type
-                # (usually there just is 1 u-block but there can be multiple)
-                if subitem.attrib == {"class": "accordion u-block"}:
-                    for subsubitem in subitem.xpath("child::section"):
+    match = re.match(pattern, str_time)
 
-                        title = subsubitem.xpath("header/div/div/h4/text()").get()
-                        additional_ingredients = subsubitem.xpath(
-                            "details/ul/li/text()"
-                        ).getall()
-                        price = (
-                            subsubitem.xpath("header/div/div/p/text()[2]").get().strip()
-                        )
+    if not match:
+        raise ValueError
 
-                        result[name].append((title, additional_ingredients, price))
-
-        yield result
+    return [int(x) for x in match.group().split(":")]
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Telegram command that gets send automatically when first 'contacting' the bot.
     sends information on how to use it."""
+
     start_text = """
 /subscribe: automatische Nachrichten aktivieren.
 /unsubscribe: automatische Nachrichten deaktivieren.
@@ -410,109 +426,6 @@ Wenn /heute oder /morgen kein Wochentag ist, wird der Plan für Montag angezeigt
     )
 
     await subscribe(update=update, context=context)
-
-
-async def heute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Telegram command to manually get today's available meals
-    Command: '/heute'"""
-    message = generate_mensa_message(date.today())
-
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2
-    )
-
-
-async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Telegram command to manually get tomorrows available meals
-    Command: '/morgen'"""
-    message = generate_mensa_message(
-        date.today() + timedelta(days=1), user_aware_future_day=True
-    )
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2
-    )
-
-
-async def uebermorgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Telegram command to manually get meals 2 days in the future
-    Command: '/uebermorgen'/'ubermorgen'"""
-    message = generate_mensa_message(
-        date.today() + timedelta(days=2), user_aware_future_day=True
-    )
-    await context.bot.send_message(
-        chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2
-    )
-
-
-async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Telegram command to change the time at which todays meals will be sent automatically.
-    Command: '/changetime'"""
-    chat_id = update.effective_chat.id
-    job_manager = JobManager()
-
-    current_time = job_manager.get_job_time(chat_id)
-
-    if current_time is None:
-        message = (
-            "Automatische Nachrichten sind noch nicht aktiviert."
-            "\n/subscribe oder\n/subscribe [[Zeit]] ausführen"
-        )
-
-    elif len(context.args) != 0:
-        try:
-            hour, minute = parse_time(context.args[0])
-            job_manager = JobManager()
-
-            # unload job and remove from DB
-            job_manager.remove_job(chat_id=chat_id)
-            # creating and loading new job, and adding to DB
-            job_manager.add_job(chat_id=chat_id, hour=hour, minute=minute)
-
-            message = (
-                "Plan wird ab jetzt automatisch an Wochentagen "
-                f"{hour:02}:{minute:02} Uhr gesendet."
-            )
-
-        except ValueError:
-            message = "Eingegebene Zeit ist ungültig."
-
-    else:
-        message = "Bitte Zeit eingegeben\n/changetime [[Zeit]]"
-
-    # confirmation message
-    await context.bot.send_message(
-        chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
-    )
-
-
-async def send_mealjob_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """(debug) Telegram command that sends the time at which todays meal will be sent.
-    Command: '/when'"""
-
-    chat_id = update.effective_chat.id
-    job_manager = JobManager()
-
-    job_time = job_manager.get_job_time(chat_id)
-    if job_time is not None:
-        message = str(job_time[0]) + ":" + str(job_time[1]) + " Uhr"
-    else:
-        message = "Plan wird nicht automatisch gesendet"
-
-    await context.bot.send_message(
-        chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
-    )
-
-
-def parse_time(str_time: str) -> tuple[int, int]:
-    """checks time string for validity (regex), and if successful, returns ints Hours, Mins"""
-    pattern = "([01]?[0-9]|2[0-3]):[0-5][0-9]"
-
-    match = re.match(pattern, str_time)
-
-    if not match:
-        raise ValueError
-
-    return [int(x) for x in match.group().split(":")]
 
 
 async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -559,6 +472,7 @@ async def subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Telegram command to disable automatic delivery of meal info'"""
+
     chat_id = update.effective_chat.id
 
     try:
@@ -579,10 +493,106 @@ async def unsubscribe(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         )
 
 
+async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Telegram command to change the time at which todays meals will be sent automatically.
+    Command: '/changetime'"""
+
+    chat_id = update.effective_chat.id
+    job_manager = JobManager()
+
+    current_time = job_manager.get_job_time(chat_id)
+
+    if current_time is None:
+        message = (
+            "Automatische Nachrichten sind noch nicht aktiviert."
+            "\n/subscribe oder\n/subscribe [[Zeit]] ausführen"
+        )
+
+    elif len(context.args) != 0:
+        try:
+            hour, minute = parse_time(context.args[0])
+            job_manager = JobManager()
+
+            # unload job and remove from DB
+            job_manager.remove_job(chat_id=chat_id)
+            # creating and loading new job, and adding to DB
+            job_manager.add_job(chat_id=chat_id, hour=hour, minute=minute)
+
+            message = (
+                "Plan wird ab jetzt automatisch an Wochentagen "
+                f"{hour:02}:{minute:02} Uhr gesendet."
+            )
+
+        except ValueError:
+            message = "Eingegebene Zeit ist ungültig."
+
+    else:
+        message = "Bitte Zeit eingegeben\n/changetime [[Zeit]]"
+
+    # confirmation message
+    await context.bot.send_message(
+        chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+    )
+
+
+async def heute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Telegram command to manually get today's available meals
+    Command: '/heute'"""
+
+    message = generate_mensa_message(date.today())
+
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2
+    )
+
+
+async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Telegram command to manually get tomorrows available meals
+    Command: '/morgen'"""
+
+    message = generate_mensa_message(
+        date.today() + timedelta(days=1), user_aware_future_day=True
+    )
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2
+    )
+
+
+async def uebermorgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Telegram command to manually get meals 2 days in the future
+    Command: '/uebermorgen'/'ubermorgen'"""
+
+    message = generate_mensa_message(
+        date.today() + timedelta(days=2), user_aware_future_day=True
+    )
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id, text=message, parse_mode=ParseMode.MARKDOWN_V2
+    )
+
+
+async def send_mealjob_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """(debug) Telegram command that sends the time at which todays meal will be sent.
+    Command: '/when'"""
+
+    chat_id = update.effective_chat.id
+    job_manager = JobManager()
+
+    job_time = job_manager.get_job_time(chat_id)
+    if job_time is not None:
+        message = str(job_time[0]) + ":" + str(job_time[1]) + " Uhr"
+    else:
+        message = "Plan wird nicht automatisch gesendet"
+
+    await context.bot.send_message(
+        chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
+    )
+
+
 # used as callback when called automatically (daily)
 async def job_send_today_meals(context: ContextTypes.DEFAULT_TYPE) -> None:
     """callback job that fetches, formats and sends todays meals
     to appropriate user at chosen time of day"""
+
     message = generate_mensa_message(date.today())
 
     await context.bot.send_message(
@@ -592,6 +602,7 @@ async def job_send_today_meals(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def playwright_fetch_grades() -> list:
     """private use function: retrieves exam results from CampusDual using local creds."""
+
     with open("login_creds.txt", "r", encoding="utf8") as fobj:
         uname, password = fobj.readline().strip().split(",")
 
@@ -642,6 +653,7 @@ async def playwright_fetch_grades() -> list:
 
 async def job_send_new_grades(context: ContextTypes.DEFAULT_TYPE):
     """private use job that triggers retrieval of grades from CampusDual, then formats message"""
+
     if not context.job.chat_id == 578278860:
         return
 
@@ -700,6 +712,7 @@ async def force_get_new_grades(update: Update, context: ContextTypes.DEFAULT_TYP
 async def acknowledge(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """(private) Telegram command to acknowledge all current grades, so they won't be sent again
     Command: '/ack [command]'"""
+
     if not update.effective_chat.id == 578278860:
         return
 
