@@ -1,4 +1,5 @@
 __pycache__
+.vscode
 token.txt
 login_creds.txt
 userhash.txt
