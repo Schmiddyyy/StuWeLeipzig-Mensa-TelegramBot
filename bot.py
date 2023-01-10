@@ -208,10 +208,21 @@ class JobManager:
     def get_job_time(self, chat_id: int) -> tuple[str, str]:
         """retrieves the time at which a job for a given chat id will be run"""
 
-        job_time = JobManager.cur.execute(
-            "select hour,min from chatids where id=(?)", [chat_id]
-        ).fetchone()
-        return job_time
+        ##### retrieval from DB. This assumes that time is parsed && job is loaded correctly
+        # job_time = JobManager.cur.execute(
+        #     "select hour,minute from chatids where id=(?)", [chat_id]
+        # ).fetchone()
+        #formatted_string = str(hour) + ":" + str(minute) + " Uhr"
+
+
+        # ugly
+        formatted_string = f"count: {len(JobManager.loaded_jobs)}\n"
+
+        for job in JobManager.loaded_jobs:
+            formatted_string += str(JobManager.loaded_jobs[job].job.trigger) + "\n"
+
+
+        return formatted_string
 
 
 ###### crawler setup and stuff
@@ -546,7 +557,7 @@ async def heute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 
-async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Telegram command to manually get tomorrows available meals
     Command: '/morgen'"""
 
@@ -558,9 +569,9 @@ async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-async def uebermorgen(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def uebermorgen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Telegram command to manually get meals 2 days in the future
-    Command: '/uebermorgen'/'ubermorgen'"""
+    Commands: '/uebermorgen' '/ubermorgen' """
 
     message = generate_mensa_message(
         date.today() + timedelta(days=2), user_aware_future_day=True
@@ -579,9 +590,11 @@ async def send_mealjob_time(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     job_time = job_manager.get_job_time(chat_id)
     if job_time is not None:
-        message = str(job_time[0]) + ":" + str(job_time[1]) + " Uhr"
+        message = job_time
     else:
         message = "Plan wird nicht automatisch gesendet"
+
+    # print(JobManager.loaded_jobs[0])
 
     await context.bot.send_message(
         chat_id=chat_id, text=message, parse_mode=ParseMode.MARKDOWN
