@@ -6,7 +6,7 @@ The daily meal can be scheduled to be sent every day at a specific time, per use
 
 The exam scores being sent is only meant for private use. it can only be called from (and sent to)
 a single, hardcoded chat id, as the credentials are currently stored in clear text.
-"""
+""" 
 import logging
 import re
 import sqlite3
@@ -170,7 +170,7 @@ class JobManager:
             job_reference = JobManager.application.job_queue.run_daily(
                 callback=job_send_today_meals,
                 time=utc_time,
-                days=(0, 1, 2, 3, 4, 5, 6),
+                days=(1, 2, 3, 4, 5),
                 chat_id=int(line[0]),
             )
             JobManager.loaded_jobs[int(line[0])] = job_reference
@@ -189,7 +189,7 @@ class JobManager:
         job_reference = JobManager.application.job_queue.run_daily(
             callback=job_send_today_meals,
             time=utc_time,
-            days=(0, 1, 2, 3, 4, 5, 6),
+            days=(1, 2, 3, 4, 5),
             chat_id=chat_id,
         )
 
