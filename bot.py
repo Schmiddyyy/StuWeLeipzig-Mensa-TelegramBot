@@ -6,7 +6,7 @@ The daily meal can be scheduled to be sent every day at a specific time, per use
 
 The exam scores being sent is only meant for private use. it can only be called from (and sent to)
 a single, hardcoded chat id, as the credentials are currently stored in clear text.
-""" 
+"""
 import logging
 import re
 import sqlite3
@@ -41,83 +41,72 @@ def main():
         ),
     )
 
-    # if pidfile exists ≙ program is already running: catch the pidfilelocked exc, sys.exit()
+    # logging format config
+    logging.basicConfig(
+        level=logging.WARN,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
+    # loading API token for Telegram bot access
     try:
-        # prevents multiple instances of this script to run at the same time
-        # → easy way to restart in case of error
-        with PidFile():
-            # :(
-            # global application
-
-            # logging format config
-            logging.basicConfig(
-                level=logging.WARN,
-                format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            )
-
-            # loading API token for Telegram bot access
-            try:
-                with open("token.txt", "r", encoding="utf8") as fobj:
-                    token = fobj.readline().strip()
-            except FileNotFoundError:
-                logging.critical(
-                    "'token.txt' missing. Create it and insert the token (without quotation marks)"
-                )
-                sys.exit()
-
-            application = (
-                ApplicationBuilder()
-                .token(token)
-                .read_timeout(30)
-                .write_timeout(30)
-                .connect_timeout(30)
-                .pool_timeout(30)
-                .build()
-            )
-
-            # restoring all daily auto messages using chatids and times saved to jobs.db
-            JobManager(application).load_jobs()
-
-            start_handler = CommandHandler("start", start)
-            application.add_handler(start_handler)
-
-            heute_handler = CommandHandler("heute", heute)
-            application.add_handler(heute_handler)
-
-            morgen_handler = CommandHandler("morgen", morgen)
-            application.add_handler(morgen_handler)
-
-            uebermorgen_handler = CommandHandler("uebermorgen", uebermorgen)
-            ubermorgen_handler = CommandHandler("ubermorgen", uebermorgen)
-            application.add_handler(uebermorgen_handler)
-            application.add_handler(ubermorgen_handler)
-
-            subscribe_handler = CommandHandler("subscribe", subscribe)
-            application.add_handler(subscribe_handler)
-
-            unsubscribe_handler = CommandHandler("unsubscribe", unsubscribe)
-            application.add_handler(unsubscribe_handler)
-
-            changetime_handler = CommandHandler("changetime", changetime)
-            application.add_handler(changetime_handler)
-
-            send_mealjob_time_handler = CommandHandler("when", send_mealjob_time)
-            application.add_handler(send_mealjob_time_handler)
-
-            force_get_new_grades_handler = CommandHandler("cd", force_get_new_grades)
-            application.add_handler(force_get_new_grades_handler)
-
-            ack_handler = CommandHandler("ack", acknowledge)
-            application.add_handler(ack_handler)
-
-            application.job_queue.run_repeating(
-                callback=job_send_new_grades, interval=300, chat_id=578278860
-            )
-
-            application.run_polling()
-
-    except PidFileAlreadyLockedError:
+        with open("token.txt", "r", encoding="utf8") as fobj:
+            token = fobj.readline().strip()
+    except FileNotFoundError:
+        logging.critical(
+            "'token.txt' missing. Create it and insert the token (without quotation marks)"
+        )
         sys.exit()
+
+    application = (
+        ApplicationBuilder()
+        .token(token)
+        .read_timeout(30)
+        .write_timeout(30)
+        .connect_timeout(30)
+        .pool_timeout(30)
+        .build()
+    )
+
+    # restoring all daily auto messages using chatids and times saved to jobs.db
+    JobManager(application).load_jobs()
+
+    start_handler = CommandHandler("start", start)
+    application.add_handler(start_handler)
+
+    heute_handler = CommandHandler("heute", heute)
+    application.add_handler(heute_handler)
+
+    morgen_handler = CommandHandler("morgen", morgen)
+    application.add_handler(morgen_handler)
+
+    uebermorgen_handler = CommandHandler("uebermorgen", uebermorgen)
+    ubermorgen_handler = CommandHandler("ubermorgen", uebermorgen)
+    application.add_handler(uebermorgen_handler)
+    application.add_handler(ubermorgen_handler)
+
+    subscribe_handler = CommandHandler("subscribe", subscribe)
+    application.add_handler(subscribe_handler)
+
+    unsubscribe_handler = CommandHandler("unsubscribe", unsubscribe)
+    application.add_handler(unsubscribe_handler)
+
+    changetime_handler = CommandHandler("changetime", changetime)
+    application.add_handler(changetime_handler)
+
+    send_mealjob_time_handler = CommandHandler("when", send_mealjob_time)
+    application.add_handler(send_mealjob_time_handler)
+
+    force_get_new_grades_handler = CommandHandler("cd", force_get_new_grades)
+    application.add_handler(force_get_new_grades_handler)
+
+    ack_handler = CommandHandler("ack", acknowledge)
+    application.add_handler(ack_handler)
+
+    application.job_queue.run_repeating(
+        callback=job_send_new_grades, interval=300, chat_id=578278860
+    )
+
+    application.run_polling()
 
 
 class JobManager:
@@ -205,22 +194,20 @@ class JobManager:
         JobManager.loaded_jobs[chat_id].schedule_removal()
         del JobManager.loaded_jobs[chat_id]
 
-    def get_job_time(self, chat_id: int) -> tuple[str, str]:
+    def get_job_times(self) -> tuple[str, str]:
         """retrieves the time at which a job for a given chat id will be run"""
 
         ##### retrieval from DB. This assumes that time is parsed && job is loaded correctly
         # job_time = JobManager.cur.execute(
         #     "select hour,minute from chatids where id=(?)", [chat_id]
         # ).fetchone()
-        #formatted_string = str(hour) + ":" + str(minute) + " Uhr"
-
+        # formatted_string = str(hour) + ":" + str(minute) + " Uhr"
 
         # ugly
         formatted_string = f"count: {len(JobManager.loaded_jobs)}\n"
 
-        for job in JobManager.loaded_jobs:
-            formatted_string += str(JobManager.loaded_jobs[job].job.trigger) + "\n"
-
+        for job_item in JobManager.loaded_jobs.items():
+            formatted_string += str(job_item[1].job.trigger) + "\n"
 
         return formatted_string
 
@@ -511,7 +498,7 @@ async def changetime(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     job_manager = JobManager()
 
-    current_time = job_manager.get_job_time(chat_id)
+    current_time = job_manager.get_job_times()
 
     if current_time is None:
         message = (
@@ -571,7 +558,7 @@ async def morgen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def uebermorgen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Telegram command to manually get meals 2 days in the future
-    Commands: '/uebermorgen' '/ubermorgen' """
+    Commands: '/uebermorgen' '/ubermorgen'"""
 
     message = generate_mensa_message(
         date.today() + timedelta(days=2), user_aware_future_day=True
@@ -588,7 +575,7 @@ async def send_mealjob_time(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     chat_id = update.effective_chat.id
     job_manager = JobManager()
 
-    job_time = job_manager.get_job_time(chat_id)
+    job_time = job_manager.get_job_times()
     if job_time is not None:
         message = job_time
     else:
@@ -760,4 +747,12 @@ async def acknowledge(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        # prevents multiple instances of this script to run at the same time
+        # → easy way to restart in case of error
+        with PidFile():
+            main()
+
+    # if pidfile exists ≙ program is already running: catch the pidfilelocked exc, cleanly exit
+    except PidFileAlreadyLockedError:
+        sys.exit()
