@@ -227,9 +227,9 @@ class MensaSpider(scrapy.Spider):
         ).get()
 
         for header in response.css("h3.title-prim"):
-            name = header.xpath("text()").get()
+            meal_type = header.xpath("text()").get()
 
-            result[name] = []
+            result[meal_type] = []
 
             for subitem in header.xpath("following-sibling::*"):
                 # title-prim ≙ begin of next menu type/end of this menu → stop processing
@@ -248,7 +248,7 @@ class MensaSpider(scrapy.Spider):
                             subsubitem.xpath("header/div/div/p/text()[2]").get().strip()
                         )
 
-                        result[name].append((title, additional_ingredients, price))
+                        result[meal_type].append((title, additional_ingredients, price))
 
         yield result
 
