@@ -335,7 +335,7 @@ def generate_mensa_message(input_date: date, user_aware_future_day: bool = False
         "Schoenauer Str": 140,
         "Tierklinik": 170,
     }
-    location = mensen_ids["Schoenauer Str"]
+    location = mensen_ids["am Park"]
 
     # Heute ist Mo-Fr (fooden)
     if input_date.isoweekday() <= 5:
