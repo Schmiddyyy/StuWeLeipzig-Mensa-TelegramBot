@@ -220,16 +220,26 @@ class MensaSpider(scrapy.Spider):
     name = "mensaplan"
 
     def parse(self, response, **kwargs):
-        result = {}
+        result = {
+            "date": "",
+            "meals": []
+        }
 
+        # extracted date from website, to verify if it matches requested date
         result["date"] = response.css(
             'select#edit-date>option[selected="selected"]::text'
         ).get()
 
         for header in response.css("h3.title-prim"):
-            meal_type = header.xpath("text()").get()
+            meal = {
+                "type": "",
+                "name": "",
+                "additional_ingredients": [],
+                "prices": ""
+            }
 
-            result[meal_type] = []
+            # type of meal, like 'vegetarian'
+            meal["type"] = header.xpath("text()").get()
 
             for subitem in header.xpath("following-sibling::*"):
                 # title-prim ≙ begin of next menu type/end of this menu → stop processing
@@ -240,15 +250,15 @@ class MensaSpider(scrapy.Spider):
                 if subitem.attrib == {"class": "accordion u-block"}:
                     for subsubitem in subitem.xpath("child::section"):
 
-                        title = subsubitem.xpath("header/div/div/h4/text()").get()
-                        additional_ingredients = subsubitem.xpath(
+                        meal["name"] = subsubitem.xpath("header/div/div/h4/text()").get()
+                        meal["additional_ingredients"] = subsubitem.xpath(
                             "details/ul/li/text()"
                         ).getall()
-                        price = (
+                        meal["prices"] = (
                             subsubitem.xpath("header/div/div/p/text()[2]").get().strip()
                         )
-
-                        result[meal_type].append((title, additional_ingredients, price))
+                        # saving extracted data to individual meal data
+                        result["meals"].append(meal)
 
         yield result
 
@@ -270,21 +280,33 @@ def mensa_data_to_string(mensa_data, using_date) -> str:
 
     else:
         # generating sub_message from spider results
-        for result in mensa_data[0]:
-            if result == "date":
-                continue
+        for meal in mensa_data[0]['meals']:
+            # # # # # # if result == "date":
+            # # # # # #     continue
 
-            # result = type of meal: vegetarian/meat/free choice
-            sub_message += "\n*" + result + ":*\n"
-            # usually a type only has one meal, except for the 'free choice' type of meals
-            for main_meal in mensa_data[0][result]:
-                # name of meal (or. name of subitem for free choice meal)
-                sub_message += " •__ " + main_meal[0] + "__\n"
-                # components or ingredients of a meal (accessible using '+' on page)
-                for additional_ingredient in main_meal[1]:
-                    sub_message += "     + _" + additional_ingredient + "_\n"
-                # price of meal or subitem
-                sub_message += "   " + main_meal[2] + "\n"
+            # meal["type"]: vegetarian/meat/free choice
+            sub_message += "\n*" + meal["type"] + ":*\n"
+            
+            # meal name (will break for multi-item dishes)
+            sub_message += " •__ " + meal["name"] + "__\n"
+
+            # add. ingredients
+            for ingredient in meal["additional_ingredients"]:
+                sub_message += "     + _" + ingredient + "_\n"
+            
+            # 
+            sub_message += "   " + meal["prices"] + "\n"
+
+            
+            # # # # # # # # # # usually a type only has one meal, except for the 'free choice' type of meals
+            # # # # # # # # # for main_meal in mensa_data[0][result]:
+            # # # # # # # # #     # name of meal (or. name of subitem for free choice meal)
+            # # # # # # # # #     sub_message += " •__ " + main_meal[0] + "__\n"
+            # # # # # # # # #     # components or ingredients of a meal (accessible using '+' on page)
+            # # # # # # # # #     for additional_ingredient in main_meal[1]:
+            # # # # # # # # #         sub_message += "     + _" + additional_ingredient + "_\n"
+            # # # # # # # # #     # price of meal or subitem
+            # # # # # # # # #     sub_message += "   " + main_meal[2] + "\n"
 
     return sub_message
 
