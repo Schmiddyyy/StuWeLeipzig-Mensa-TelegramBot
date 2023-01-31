@@ -231,7 +231,7 @@ class MensaSpider(scrapy.Spider):
         ).get()
 
         for header in response.css("h3.title-prim"):
-            # kommt
+            # TODO Commenting
             meal_group = {
                 "type": "",
                 "sub_meals": []
@@ -240,8 +240,11 @@ class MensaSpider(scrapy.Spider):
             meal = {
                 "name": "",
                 "additional_ingredients": [],
-                "prices": ""
+                "prices": "",
+                "icon_categories": []
             }
+
+            
 
             # type of meal, like 'vegetarian'
             # meal["type"] = header.xpath("text()").get()
@@ -264,10 +267,36 @@ class MensaSpider(scrapy.Spider):
                         meal["prices"] = (
                             subsubitem.xpath("header/div/div/p/text()[2]").get().strip()
                         )
+                        meal["icon_categories"] = subsubitem.xpath("header/div/p/i)text()")
+                       
+                       
+
+
+
                         # saving extracted data to individual meal data
                         result["meals"].append(meal)
+       
+       
+        #TODO validate the Category with the icon_category    
+        
+        for footer in ("figure.icon-legend__item"):
+           
+           icon_categories = {
+                "name": "",
+                "type": ""
+            }
+            for subitem in footer.xpath("following-sibling::*"):
+                if subitem.attrib == {"class": "icon-legend__desc"}:
+                    ######## end of block
+                    icon_categories["name"] = header.xpath("text()").get()
+                    break
+                
+
+
 
         yield result
+
+
 
 
 def mensa_data_to_string(mensa_data, using_date) -> str:
