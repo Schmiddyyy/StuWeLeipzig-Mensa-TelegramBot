@@ -243,9 +243,7 @@ class MensaSpider(scrapy.Spider):
             # ALL following siblings
             for subitem in header.xpath("following-sibling::*"):
 
-                if subitem.attrib == {"class": "title-prim"} or len(subitem.xpath("following-sibling::*")) == 0:
-                    print(subitem.attrib, len(subitem.xpath("following-sibling::*")))
-                    print("END OF", header.xpath("text()").get())    
+                if subitem.attrib == {"class": "title-prim"}: # or len(subitem.xpath("following-sibling::*")) == 0:
                     break
                 # new sub meal was found
 
@@ -343,24 +341,37 @@ def mensa_data_to_string(mensa_data, using_date) -> str:
     else:
         # generating sub_message from spider results
         for meal_group in mensa_data[0]['meal_groups']:
-            # # # # # # if result == "date":
-            # # # # # #     continue
+
+            # checking if all sub
+            price_is_shared = True
+            price_first_submeal = meal_group['sub_meals'][0]['prices']
+
+            for sub_meal in meal_group['sub_meals']:
+                if sub_meal['prices'] != price_first_submeal:
+                    price_is_shared = False
+                    break
 
             # meal["type"]: vegetarian/meat/free choice
             sub_message += "\n*" + meal_group["type"] + ":*\n"
             
             # meal name (will break for multi-item dishes)
+            
             for sub_meal in meal_group["sub_meals"]:
+                # if maybe_shared_price is None:
+                #     maybe_shared_price = sub_meal["prices"]
                 sub_message += " •__ " + sub_meal["name"] + "__\n"
 
                 # add. ingredients
                 for ingredient in sub_meal["additional_ingredients"]:
                     sub_message += "     + _" + ingredient + "_\n"
             
-                # Preis für Teilgericht 
+                # prices for sub-meals printed individually if they are NOT all the same
+                if not price_is_shared: 
+                    sub_message += "   " + sub_meal["prices"] + "\n"
+            
+            # one price if all subitems cost the same
+            if price_is_shared:
                 sub_message += "   " + sub_meal["prices"] + "\n"
-
-
 
     return sub_message
 
