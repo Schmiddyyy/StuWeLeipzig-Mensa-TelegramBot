@@ -220,9 +220,10 @@ class MensaSpider(scrapy.Spider):
     name = "mensaplan"
 
     def parse(self, response, **kwargs):
+
         result = {
             "date": "",
-            "all_meals": []
+            "meal_groups": []
         }
 
         # extracted date from website, to verify if it matches requested date
@@ -231,43 +232,97 @@ class MensaSpider(scrapy.Spider):
         ).get()
 
         for header in response.css("h3.title-prim"):
-            # kommt
+            # can contain one or multiple individual meal items
             meal_group = {
                 "type": "",
                 "sub_meals": []
             }
+            # TYP
+            meal_group["type"] = header.xpath("text()").get()
 
-            meal = {
-                "name": "",
-                "additional_ingredients": [],
-                "prices": ""
-            }
-
-            # type of meal, like 'vegetarian'
-            # meal["type"] = header.xpath("text()").get()
-
+            # ALL following siblings
             for subitem in header.xpath("following-sibling::*"):
-                # title-prim ≙ begin of next menu type/end of this menu → stop processing
-                if subitem.attrib == {"class": "title-prim"}:
-                    ######## end of block
-                    meal_group["type"] = header.xpath("text()").get()
-                    break
-                # accordion u-block: top-level item of a meal type
-                # (usually there just is 1 u-block but there can be multiple)
-                if subitem.attrib == {"class": "accordion u-block"}:
-                    for subsubitem in subitem.xpath("child::section"):
 
-                        meal["name"] = subsubitem.xpath("header/div/div/h4/text()").get()
-                        meal["additional_ingredients"] = subsubitem.xpath(
-                            "details/ul/li/text()"
-                        ).getall()
-                        meal["prices"] = (
-                            subsubitem.xpath("header/div/div/p/text()[2]").get().strip()
-                        )
+                if subitem.attrib == {"class": "title-prim"} or len(subitem.xpath("following-sibling::*")) == 0:
+                    print(subitem.attrib, len(subitem.xpath("following-sibling::*")))
+                    print("END OF", header.xpath("text()").get())    
+                    break
+                # new sub meal was found
+
+                elif subitem.attrib == {"class": "accordion u-block"}:
+                    for subsubitem in subitem.xpath("child::section"):
+                        meal = {
+                            "name": subsubitem.xpath("header/div/div/h4/text()").get(),
+                            "additional_ingredients": subsubitem.xpath("details/ul/li/text()").getall(),
+                            "prices": subsubitem.xpath("header/div/div/p/text()[2]").get().strip()
+                        }
+                        
                         # saving extracted data to individual meal data
-                        result["meals"].append(meal)
+                        meal_group["sub_meals"].append(meal)
+
+            result["meal_groups"].append(meal_group)
+
 
         yield result
+
+        # result = {
+        #     "date": "",
+        #     "all_meals": []
+        # }
+
+        # # extracted date from website, to verify if it matches requested date
+        # result["date"] = response.css(
+        #     'select#edit-date>option[selected="selected"]::text'
+        # ).get()
+
+        # for header in response.css("h3.title-prim"):
+        #     # contains all 'root-level' meal types
+        #     meal_group = {
+        #         "type": "",
+        #         "sub_meals": []
+        #     }
+
+        #     # gets appended to meal_group['sub_meal']
+        #     # a meal group can have 1 or more meals
+        #     meal = {
+        #         "name": "",
+        #         "additional_ingredients": [],
+        #         "prices": ""
+        #     }
+
+        #     # type of meal, like 'vegetarian'
+        #     # meal["type"] = header.xpath("text()").get()
+
+        #     for subitem in header.xpath("following-sibling::*"):
+        #         meal_group["type"] = header.xpath("text()").get()
+
+        #         # title-prim ≙ begin of next menu type/end of this menu → stop processing
+        #         if subitem.attrib == {"class": "title-prim"}:
+        #             #print("END OF", header.xpath("text()").get())
+        #             ######## end of block - write out meal type
+        #             # meal_group["type"] = header.xpath("text()").get()
+        #             #result['all_meals'].append(meal_group)
+        #             break
+
+        #         # accordion u-block: top-level item of a meal type
+        #         # (usually there just is 1 u-block but there can be multiple)
+        #         if subitem.attrib == {"class": "accordion u-block"}:
+        #             for subsubitem in subitem.xpath("child::section"):
+
+        #                 meal["name"] = subsubitem.xpath("header/div/div/h4/text()").get()
+        #                 meal["additional_ingredients"] = subsubitem.xpath(
+        #                     "details/ul/li/text()"
+        #                 ).getall()
+        #                 meal["prices"] = (
+        #                     subsubitem.xpath("header/div/div/p/text()[2]").get().strip()
+        #                 )
+        #                 # saving extracted data to individual meal data
+        #                 meal_group["sub_meals"].append(meal)
+                
+        #         print("AFTER BREAK???")
+        #         result['all_meals'].append(meal_group)
+                
+        # yield result
 
 
 def mensa_data_to_string(mensa_data, using_date) -> str:
@@ -287,33 +342,25 @@ def mensa_data_to_string(mensa_data, using_date) -> str:
 
     else:
         # generating sub_message from spider results
-        for meal in mensa_data[0]['meals']:
+        for meal_group in mensa_data[0]['meal_groups']:
             # # # # # # if result == "date":
             # # # # # #     continue
 
             # meal["type"]: vegetarian/meat/free choice
-            sub_message += "\n*" + meal["type"] + ":*\n"
+            sub_message += "\n*" + meal_group["type"] + ":*\n"
             
             # meal name (will break for multi-item dishes)
-            sub_message += " •__ " + meal["name"] + "__\n"
+            for sub_meal in meal_group["sub_meals"]:
+                sub_message += " •__ " + sub_meal["name"] + "__\n"
 
-            # add. ingredients
-            for ingredient in meal["additional_ingredients"]:
-                sub_message += "     + _" + ingredient + "_\n"
+                # add. ingredients
+                for ingredient in sub_meal["additional_ingredients"]:
+                    sub_message += "     + _" + ingredient + "_\n"
             
-            # 
-            sub_message += "   " + meal["prices"] + "\n"
+                # Preis für Teilgericht 
+                sub_message += "   " + sub_meal["prices"] + "\n"
 
-            
-            # # # # # # # # # # usually a type only has one meal, except for the 'free choice' type of meals
-            # # # # # # # # # for main_meal in mensa_data[0][result]:
-            # # # # # # # # #     # name of meal (or. name of subitem for free choice meal)
-            # # # # # # # # #     sub_message += " •__ " + main_meal[0] + "__\n"
-            # # # # # # # # #     # components or ingredients of a meal (accessible using '+' on page)
-            # # # # # # # # #     for additional_ingredient in main_meal[1]:
-            # # # # # # # # #         sub_message += "     + _" + additional_ingredient + "_\n"
-            # # # # # # # # #     # price of meal or subitem
-            # # # # # # # # #     sub_message += "   " + main_meal[2] + "\n"
+
 
     return sub_message
 
