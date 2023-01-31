@@ -222,7 +222,7 @@ class MensaSpider(scrapy.Spider):
     def parse(self, response, **kwargs):
         result = {
             "date": "",
-            "meals": []
+            "all_meals": []
         }
 
         # extracted date from website, to verify if it matches requested date
@@ -231,19 +231,26 @@ class MensaSpider(scrapy.Spider):
         ).get()
 
         for header in response.css("h3.title-prim"):
-            meal = {
+            # kommt
+            meal_group = {
                 "type": "",
+                "sub_meals": []
+            }
+
+            meal = {
                 "name": "",
                 "additional_ingredients": [],
                 "prices": ""
             }
 
             # type of meal, like 'vegetarian'
-            meal["type"] = header.xpath("text()").get()
+            # meal["type"] = header.xpath("text()").get()
 
             for subitem in header.xpath("following-sibling::*"):
                 # title-prim ≙ begin of next menu type/end of this menu → stop processing
                 if subitem.attrib == {"class": "title-prim"}:
+                    ######## end of block
+                    meal_group["type"] = header.xpath("text()").get()
                     break
                 # accordion u-block: top-level item of a meal type
                 # (usually there just is 1 u-block but there can be multiple)
